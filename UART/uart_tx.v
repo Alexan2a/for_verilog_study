@@ -42,7 +42,7 @@ module uart_tx(input wire rst, clk, tx_valid,
 					tx_empty <= 1'b1;
 				end
 				else begin
-					if (tx_shift == 10'b0111111111) 
+					if (tx_shift[8:0] == 9'b011111111) 
 						//ti <= 1'b1;
 						tx_ready = 1'b1;
 					tx <= tx_shift[9];
