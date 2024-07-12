@@ -1,13 +1,12 @@
 module uart_tb();
 	
-	reg clk, rst;
+	reg clk, rst, valid;
 	reg [7:0] in;
-	wire [7:0] b;
-	wire out;
-	reg a;
+	wire out, ready;
 
 	initial 
 		begin
+			valid = 1;
 			clk = 0;
 			in = 0;
 		end
@@ -20,10 +19,8 @@ module uart_tb();
 		end
 
 	always #5 clk = ~clk;
-	always #60 in = in + 1;
+	always #600 in = in + 1;
 
-	uart mygate(rst, clk, a, in, b, out);
-	
-
+	uart_tx mygate(.rst(rst), .clk(clk), .tx_data(in), .tx(out), .tx_ready(ready), .tx_valid(valid));
 	
 endmodule
