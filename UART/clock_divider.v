@@ -1,6 +1,6 @@
 module clock_divider #(parameter N)(input wire in_clk, rst, output reg out_clk);
 
-	reg [9:0] counter;
+	reg [$clog2(N):0] counter;
 	always @(posedge in_clk or negedge rst)
 		begin
  			if (counter >= (N - 1) || !rst)

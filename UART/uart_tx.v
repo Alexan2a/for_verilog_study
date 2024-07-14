@@ -8,10 +8,10 @@ module uart_tx(input wire rst, clk, tx_valid,
 	reg [9:0] tx_shift;
 	
 	parameter N = 868;
-	parameter M = 87;
+	parameter M = N * 10;
 
-	clock_divider #(N) d1(.rst(rst), .in_clk(clk), .out_clk(clk1));
-	clock_divider #(M) d2(.rst(rst), .in_clk(clk), .out_clk(clk2));
+	clock_divider #(M) d1(.rst(rst), .in_clk(clk), .out_clk(clk1));
+	clock_divider #(N) d2(.rst(rst), .in_clk(clk), .out_clk(clk2));
 
 	//transfer input 
 	always @(posedge clk1 or negedge rst) 
@@ -49,5 +49,5 @@ module uart_tx(input wire rst, clk, tx_valid,
 		end
 
 	assign tx_empty = ~(tx_to_shift ^ tx_to_reg);
-
+	
 endmodule
