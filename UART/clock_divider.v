@@ -1,12 +1,14 @@
-module clock_divider #(parameter N)(input wire in_clk, rst, output reg out_clk);
+module clock_divider (input wire in_clk, rst, input wire[13:0] coef, output reg out_clk);
 
-	reg [$clog2(N):0] counter;
+	reg [13:0] counter;
 	always @(posedge in_clk or negedge rst)
 		begin
- 			if (counter >= (N - 1) || !rst)
-  				counter <= 10'd0;
+			if (!rst)
+				counter <= 14'd0;
+ 			if (counter >= (coef - 1))
+  				counter <= 14'd0;
 			else
-				counter <= counter + 10'd1;
- 			out_clk <= (counter < N/2) ? 1'b1 : 1'b0;
+				counter <= counter + 14'd1;
+ 			out_clk <= (counter == coef/2 - 1);
 		end
 endmodule
