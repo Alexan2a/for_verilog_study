@@ -9,6 +9,7 @@ module uart_tb();
 			valid = 1;
 			clk = 0;
 			in = 0;
+			#300000 valid = 0;
 		end
 
 	initial 
