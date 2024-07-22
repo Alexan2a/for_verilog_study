@@ -52,7 +52,7 @@ module uart_rx (input wire rx, clk, rst,
         if (rx_en) begin
           rx_reg <= rx_shift[8:1];
           rx_ready <= 1;
-        end
+        end else rx_ready <= 0;
         rx_en <= rx_busy;
       end
 
