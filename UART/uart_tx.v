@@ -1,13 +1,13 @@
 module uart_tx (input wire rst, clk, tx_valid,
                 input wire [7:0] tx_data,
-                output reg tx, tx_ready);
+	        output reg tx, tx_ready);
 
-  wire       clk1;
-  reg        tx_shift_en;
-  reg [3:0]  counter;
+  wire      clk1;
+  reg       tx_shift_en;
+  reg [3:0] counter;
+  reg [7:0] tx_reg;
+  reg [9:0] tx_shift;
   reg [13:0] div868 = 14'd868;
-  reg [7:0]  tx_reg;
-  reg [9:0]  tx_shift;
 
   clock_divider div(.rst(rst),
                     .coef(div868),

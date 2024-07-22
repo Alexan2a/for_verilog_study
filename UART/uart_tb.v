@@ -1,31 +1,42 @@
 module uart_tb();
 	
-	reg clk, clk1, rst, valid;
-	reg [7:0] in;
-	wire out, tx_ready, rx_ready, n_out, err;
+  reg clk, rst, valid;
+  reg [7:0] in;
+  wire [7:0] rx_out;
+  wire tx_out, tx_ready, rx_ready;
 
-	initial 
-		begin
-			valid = 1;
-			clk = 0;
-			clk1 = 1;
-			in = 0;
-			#300000 valid = 0;
-			#50000 valid = 1;
-		end
+  initial begin
+    valid = 1;
+    clk = 0;
+    in = 0;
+    #100000 valid = 1;
+  end
 
-	initial 
-		begin
-			rst = 1;
-			#10 rst = 0;
-			#10 rst = 1;
-		end
+  initial begin
+    rst = 1;
+    #10 rst = 0;
+    #10 rst = 1;
+  end
 
-	always #5 clk = ~clk;
-	always #5 clk1 = ~clk1;
-	always #600 in = in + 1;
+  always #5 clk = ~clk;
+  always #600 in = in + 1;
+  always @(tx_ready) begin
+    #1000 valid = 1;
+    #30000 valid = 0;
+  end
 
-	uart_tx mygate(.rst(rst), .clk(clk), .tx_data(in), .tx(out), .tx_ready(tx_ready), .tx_valid(valid));
-	uart_rx mygate1(.rst(rst), .clk(clk1), .rx_data(n_out), .rx(out), .rx_ready(rx_ready), .rx_err(err));
-	
+  uart_tx my_tx(.rst(rst),
+                .clk(clk),
+                .tx_data(in),
+                .tx(tx_out),
+                .tx_ready(tx_ready),
+                .tx_valid(valid));
+
+  uart_rx my_rx(.rst(rst),
+                .clk(clk),
+                .rx(tx_out),
+                .rx_data(rx_out),
+                .rx_ready(rx_ready));
+
+
 endmodule

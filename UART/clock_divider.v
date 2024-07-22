@@ -12,7 +12,7 @@ module clock_divider (input wire in_clk, rst,
       counter <= 14'd0;
     end else counter <= counter + 14'd1;
 
-    out_clk <= (counter < coef/2) ? 1'b1 : 1'b0;
+    out_clk <= (counter == coef/2-1);
 
   end
 
