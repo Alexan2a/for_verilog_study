@@ -1,12 +1,17 @@
-module uart_tx (input wire rst, clk, tx_valid,
-                input wire [7:0] tx_data,
-	        output reg tx, tx_ready);
+module uart_tx (
+  input  wire       rst,
+  input  wire       clk,
+  input  wire       tx_valid,
+  input  wire [7:0] tx_data,
+	output reg        tx,
+  output reg        tx_ready
+);
 
-  wire      clk1;
-  reg       tx_shift_en;
-  reg [3:0] counter;
-  reg [7:0] tx_reg;
-  reg [9:0] tx_shift;
+  wire       clk1;
+  reg        tx_shift_en;
+  reg [3:0]  counter;
+  reg [7:0]  tx_reg;
+  reg [9:0]  tx_shift;
   reg [13:0] div868 = 14'd868;
 
   clock_divider div(.rst(rst),
@@ -20,7 +25,7 @@ module uart_tx (input wire rst, clk, tx_valid,
       tx_shift <= 10'd2047;
       tx_ready <= 1'b1;
       tx_shift_en <= 1'b1;
-      counter <= 4'd0;
+      counter <= 4'd9;
       tx <= 1;
     end else begin
 
@@ -32,8 +37,8 @@ module uart_tx (input wire rst, clk, tx_valid,
       end
 
       if (counter == 4'd9) begin
-        counter <= 0;
         if (tx_valid && tx_ready) begin
+          counter <= 0;
           tx_reg <= tx_data;
           tx_ready <= 1'b0;
           tx_shift_en <= 1'b1;

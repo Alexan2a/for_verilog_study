@@ -1,6 +1,9 @@
-module clock_divider (input wire in_clk, rst,
-                      input wire [13:0] coef,
-                      output reg  out_clk);
+module clock_divider (
+  input  wire        in_clk, 
+  input  wire        rst,
+  input  wire [13:0] coef,
+  output reg         out_clk
+);
 
   reg [13:0] counter;
 

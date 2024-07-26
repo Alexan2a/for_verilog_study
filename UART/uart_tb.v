@@ -1,15 +1,18 @@
 module uart_tb();
 	
-  reg clk, rst, valid;
+  reg clk, rst, valid, valid_rst;
   reg [7:0] in;
   wire [7:0] rx_out;
   wire tx_out, tx_ready, rx_ready;
 
   initial begin
     valid = 1;
+    valid_rst = 1;
     clk = 0;
     in = 0;
-    #100000 valid = 1;
+    #300000 valid_rst = 0;
+    #500000 valid_rst = 1;
+
   end
 
   initial begin
@@ -20,9 +23,12 @@ module uart_tb();
 
   always #5 clk = ~clk;
   always #600 in = in + 1;
-  always @(tx_ready) begin
-    #1000 valid = 1;
-    #30000 valid = 0;
+  always @(tx_ready, valid_rst) begin
+    if (!valid_rst) valid = 0;
+    else begin
+      #1000 valid = 1;
+      #30000 valid = 0;
+    end
   end
 
   uart_tx my_tx(.rst(rst),

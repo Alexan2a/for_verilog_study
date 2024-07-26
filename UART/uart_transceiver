@@ -1,0 +1,26 @@
+module uart (
+  input  wire       clk,
+  input  wire       rst,
+  input  wire [7:0] data_in,
+  input  wire       tx_valid,
+  input  wire       rx,
+  output wire       tx,
+  output wire       tx_ready,
+  output wire       rx_ready,
+  output wire [7:0] data_out
+);
+
+  uart_tx i_tx(.rst(rst),
+               .clk(clk),
+               .tx_data(data_in),
+               .tx(tx),
+               .tx_ready(tx_ready),
+               .tx_valid(tx_valid));
+
+  uart_rx i_rx(.rst(rst),
+               .clk(clk),
+               .rx(rx),
+               .rx_data(data_out),
+               .rx_ready(rx_ready));
+
+endmodule
