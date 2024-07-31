@@ -1,11 +1,6 @@
-module uart_tx (
-  input  wire       rst,
-  input  wire       clk,
-  input  wire       tx_valid,
-  input  wire [7:0] tx_data,
-	output reg        tx,
-  output reg        tx_ready
-);
+module uart_tx (input wire rst, clk, tx_valid,
+                input wire [7:0] tx_data,
+	        output reg tx, tx_ready);
 
   wire       clk1;
   reg        tx_shift_en;
