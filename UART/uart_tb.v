@@ -2,13 +2,14 @@
 
 module uart_tb();
 	
-  parameter CLK_DEC = 5;
+  parameter CLK_DEC = 0;
   parameter CLK_TX_HP = 5;
   parameter CLK_RX_HP = CLK_TX_HP * (CLK_DEC*0.01 + 1);
-  parameter DELAY = 10;
+  parameter DELAY = 0;
 
   reg clk_tx, clk_rx, rst, valid, valid_rst;
   reg [7:0] in [0:10];
+  reg [7:0] transport;
   wire [7:0] rx_out;
   wire tx_out, rx_in, tx_ready, rx_ready;
 
@@ -62,7 +63,11 @@ module uart_tb();
     end
   end
 
-  assign #DELAY rx_in = tx_out;
+  always @(tx_out)
+    begin
+      transport <= #DELAY tx_out;
+  end
+  assign rx_in = transport;
 
   uart_tx my_tx(.rst(rst),
                 .clk(clk_tx),
