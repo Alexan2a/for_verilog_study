@@ -11,7 +11,7 @@ module uart_rx (input wire rx, clk, rst,
   reg       rx_start;
   reg       rx_busy;
   reg       clk_rst;
-  reg [13:0] div868 = 14'd868;
+  reg [13:0] div868;
 
   clock_divider div(.rst(clk_rst),
                     .coef(div868),
@@ -37,7 +37,7 @@ module uart_rx (input wire rx, clk, rst,
     if (!rst) begin
       rx_ready <= 0;
       rx_busy <= 0;
-      rx_start <= 0;
+      div868 = 14'd868;
       counter <= 0;
     end else begin
 

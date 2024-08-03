@@ -7,7 +7,7 @@ module uart_tx (input wire rst, clk, tx_valid,
   reg [3:0]  counter;
   reg [7:0]  tx_reg;
   reg [9:0]  tx_shift;
-  reg [13:0] div868 = 14'd868;
+  reg [13:0] div868;
 
   clock_divider div(.rst(rst),
                     .coef(div868),
@@ -22,6 +22,7 @@ module uart_tx (input wire rst, clk, tx_valid,
       tx_shift_en <= 1'b1;
       counter <= 4'd9;
       tx <= 1;
+      div868 = 14'd868;
     end else begin
 
       if (counter == 4'd0) begin
