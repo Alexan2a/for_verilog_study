@@ -37,7 +37,7 @@ module uart_rx (input wire rx, clk, rst,
     if (!rst) begin
       rx_ready <= 0;
       rx_busy <= 0;
-      div868 = 14'd868;
+      div868 <= 14'd868;
       counter <= 0;
     end else begin
 

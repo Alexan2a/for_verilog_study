@@ -22,7 +22,7 @@ module uart_tx (input wire rst, clk, tx_valid,
       tx_shift_en <= 1'b1;
       counter <= 4'd9;
       tx <= 1;
-      div868 = 14'd868;
+      div868 <= 14'd868;
     end else begin
 
       if (counter == 4'd0) begin
@@ -39,7 +39,7 @@ module uart_tx (input wire rst, clk, tx_valid,
           tx_ready <= 1'b0;
           tx_shift_en <= 1'b1;
         end
-      end else counter = counter + 1;
+      end else counter <= counter + 1;
 
       if (counter == 4'd8) tx_ready <= 1'b1;
 							
