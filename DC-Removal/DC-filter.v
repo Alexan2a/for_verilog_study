@@ -34,7 +34,7 @@ module DC_filter(
 	//second sum
   always @(*) begin
     res = $signed(sum) - $signed(sum_prev); //36.30
-	res = $signed(res) >>> 15; //36.15
+    res = $signed(res) >>> 15; //36.15
   end
 
   assign out = res[15:0];  //16.15
