@@ -46,7 +46,7 @@ module spi_master(
       TRANSMITION: begin
         data_reg <= {MISO, data_reg[13:1]};
         MOSI <= data_reg[0];
-        if (cnt == 17) begin
+        if (cnt == 18) begin
           cnt <= 0;
           rx_ready <= 1;
 	        Data_out <= data_reg[13:6];

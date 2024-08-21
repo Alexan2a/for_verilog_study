@@ -50,10 +50,10 @@ module spi_slave_ctrl(
         end else cnt <= cnt + 1;
       end
       DATA_IN: begin
-	      if (cnt == 0) data_reg[7:0] <= Data_in;
+	      if (cnt == 1) data_reg[7:0] <= Data_in;
         else data_reg <= {MOSI, data_reg[13:1]};
         MISO <= data_reg[1];
-	      if (cnt == 10) begin
+	      if (cnt == 11) begin
           cnt <= 0;
           if (CS) state <= IDLE;
           else state <= INF_BITS;
@@ -68,7 +68,7 @@ module spi_slave_ctrl(
           Mode <= data_reg[0];
         end
         if (cnt == 8)   Mode <= 0;
-        if (cnt == 10) begin
+        if (cnt == 11) begin
           cnt <= 0;
           if (CS) state <= IDLE;
           else state <= INF_BITS;
