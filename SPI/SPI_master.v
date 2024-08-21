@@ -22,8 +22,6 @@ module spi_master(
   reg  [2:0] state;
   reg        CS;
 
- // assign MOSI = data_reg[0];
-
   demux_2_to_1 CS_ctrl(
     .Sel(CS_Sel),
     .D(CS),
@@ -42,7 +40,7 @@ module spi_master(
       RESET: begin
         data_reg <= 0;
         cnt <= 5'b00000;
-	state <= IDLE;
+	      state <= IDLE;
         CS <= 1;
       end
       TRANSMITION: begin
@@ -51,7 +49,7 @@ module spi_master(
         if (cnt == 17) begin
           cnt <= 0;
           rx_ready <= 1;
-	  Data_out <= data_reg[13:6];
+	        Data_out <= data_reg[13:6];
           state <= IDLE;
           CS <= 1;
         end else cnt <= cnt + 1;
@@ -65,6 +63,7 @@ module spi_master(
         end
       end
       default: begin
+        state <= IDLE;
       end
     endcase
   end

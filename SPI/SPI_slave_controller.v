@@ -44,16 +44,16 @@ module spi_slave_ctrl(
             Addr <= data_reg[13:9];
             Mode <= data_reg[8];
             state <= DATA_IN;
-	  end else begin
+	        end else begin
             state <= DATA_OUT;
           end
         end else cnt <= cnt + 1;
       end
       DATA_IN: begin
-	if (cnt == 0) data_reg[7:0] <= Data_in; //which side
+	      if (cnt == 0) data_reg[7:0] <= Data_in;
         else data_reg <= {MOSI, data_reg[13:1]};
         MISO <= data_reg[1];
-	if (cnt == 10) begin
+	      if (cnt == 10) begin
           cnt <= 0;
           if (CS) state <= IDLE;
           else state <= INF_BITS;
@@ -62,8 +62,8 @@ module spi_slave_ctrl(
       DATA_OUT: begin
         data_reg <= {MOSI, data_reg[13:1]};
         MISO <= 0;
-	if (cnt == 7) begin
-	  Data_out <= data_reg[13:6];
+	      if (cnt == 7) begin
+	        Data_out <= data_reg[13:6];
           Addr <= data_reg[5:1];
           Mode <= data_reg[0];
         end
@@ -78,6 +78,7 @@ module spi_slave_ctrl(
         if (!CS) state <= INF_BITS;
       end
       default: begin
+        state <= IDLE;
       end
     endcase
   end
