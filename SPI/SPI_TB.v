@@ -1,20 +1,19 @@
 module spi_tb ();
 
-  reg        clk;
-  reg        rst;
-  reg        CS_sel;
-  reg        valid;
-  reg [13:0] data_in;
-  wire       MISO;
-  wire       CS;
-  wire       ready;
-  wire       MOSI;
+  reg clk;
+  reg rst;
+  wire MOSI;
+  reg CS_sel;
+  reg valid;
+  reg [14:0] data_in;
+  wire MISO;
+  wire CS;
+  wire ready;
   wire [7:0] ram_in;
   wire [7:0] ram_out;
   wire [7:0] data_out;
   wire [4:0] addr;
-  wire       mode;
-  
+  wire mode;
   parameter N=8;
   parameter M=32;
 
@@ -31,11 +30,12 @@ module spi_tb ();
   end
 
   initial begin
-   data_in = 14'b00000000000100;
-   valid = 1;
-  #50 valid = 0;
-   data_in = 14'b00001110001001;
-  #230 valid = 1;
+       data_in = 15'b000000111111001;
+       valid = 1;
+  #50  valid = 0;
+  #250 data_in = 15'b000011100010010;
+       valid = 1;
+  #200 data_in = 15'b000011100001000;
   end
 
   RAM #(N,M) i_ram(
@@ -55,7 +55,7 @@ module spi_tb ();
     .MOSI(MOSI),
     .Data_out(ram_in),
     .Addr(addr),
-    .Mode(mode)
+    .WE(mode)
 );
 
   spi_master i_master(
