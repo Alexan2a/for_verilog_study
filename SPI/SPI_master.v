@@ -1,7 +1,7 @@
 module spi_master(
   input  wire        rst,
   input  wire        clk,
-  input  wire        MISO,
+  input  wor         MISO,
   input  wire [14:0] Data_in,
   input  wire        tx_valid,
   input  wire        CS_Sel,
@@ -21,90 +21,117 @@ module spi_master(
   reg [14:0] data_reg;
   reg  [1:0] mode_reg;
   reg  [4:0] cnt;
-  reg  [1:0] state;
-  reg        CS;
   reg  [4:0] inc_cnt;
-  reg        MOSI_en;
+  reg  [1:0] state;
+  reg  [1:0] next_state;
+  reg        CS;
 
+  // sets CS0 or CS1 to CS depending on CS_Sel
   demux_2_to_1 CS_ctrl(
     .Sel(CS_Sel),
     .D(CS),
     .S0(CS0),
     .S1(CS1)
   );
-
-  always @(negedge rst) begin
+  
+   always @(negedge rst, posedge clk) begin
     if (!rst) begin
-      state <= RESET;
+      state <= IDLE;
+    end else begin
+      state <= next_state;
     end
   end
 
-  assign MOSI =  data_reg[0] & MOSI_en;
-
-  always @(posedge clk) begin
-    case(state)
-      RESET: begin
-        data_reg <= 15'b0;
-        mode_reg <= 2'b0;
-        inc_cnt <= 5'b00000;
-        cnt <= 5'b00000;
-	      state <= IDLE;
-        MOSI_en <= 1;
-        CS <= 1;
-      end
+  assign MOSI = (state == DATA) ? data_reg[0] : 1'b0;
   
+  // sets rx_ready to 1 when read mode, sets to 0 if not
+  always @(negedge rst, posedge clk) begin
+    if (!rst) begin
+      rx_ready <= 0;
+    end else begin
+      rx_ready <= (state == DATA && cnt == 17) ? !mode_reg[1] :
+                  (state == DATA_INC && cnt == 9) ? 1'b1 :
+                   1'b0;
+    end
+  end
+
+  // sets Data_out to recieved data
+  always @(negedge rst, posedge clk) begin
+    if (!rst) begin
+      Data_out <= 0;
+    end else if (((state == DATA && cnt == 17) || (state == DATA_INC && cnt == 9)) && !mode_reg[1]) begin
+      Data_out <= data_reg[14:7];
+    end
+  end
+
+  // increment counter process: sets inc_cnt at the start of transmission, 
+  //                            reduces inc_cnt depending in state;
+  always @(negedge rst, posedge clk) begin
+    if (!rst) begin
+      inc_cnt <= 5'b00000;
+    end else if (state == DATA && cnt == 0 && mode_reg[0]) inc_cnt <= data_reg[11:7];
+    else if     (state == DATA && cnt == 17 && mode_reg[0]) inc_cnt <= inc_cnt - 2;
+    else if     (state == DATA_INC && cnt == 9 ) inc_cnt <= inc_cnt - 1;
+  end
+
+  // data_register process: sets input data to register when mode state IDLE and it is valid, 
+  //                        otherwise shifts register if state != IDLE;
+  always @(negedge rst, posedge clk) begin 
+    if (!rst) begin
+      data_reg <= 0;
+    end else if (state == IDLE && tx_valid) data_reg <= Data_in;
+    else if (state == DATA || state == DATA_INC) data_reg <= {MISO, data_reg[14:1]};
+  end
+
+  // counter process: nulls cnt when state time ends, otherwise increments cnt
+  always @(negedge rst, posedge clk) begin 
+    if (!rst) begin
+      cnt <= 5'b0000;     // counter process
+    end else if (state != IDLE) begin
+      cnt <= (state == DATA    && cnt == 5'd17) ? 5'b0000 :
+             (state == DATA_INC && cnt == 5'd9) ? 5'b0000 :
+              cnt + 1;       
+    end
+  end
+
+  // cheap select process: sets CS to 1 when it is not incremented read or write mode, 
+  //                                         the end of memory was reached in incremented read mode,
+  //                                         the proper count of data was read in incremented read mode,
+  //                       sets CS to 0 when state is IDLE and there is valid data input;
+  always @(negedge rst, posedge clk) begin 
+    if (!rst) begin
+      CS <= 1'b1;
+    end else if (state == DATA && cnt == 1) begin
+      CS <= (!mode_reg[0] || (mode_reg[0] && (inc_cnt == 5'b00001 || inc_cnt == 5'b00000 || data_reg[5:1] == 5'b11111))) ? 1'b1 : 1'b0;      
+    end else if (state == DATA_INC && cnt == 0) begin
+      CS <= (data_reg[14] == 1 || !inc_cnt) ? 1'b1 : 1'b0;
+    end else if (state == IDLE) CS <= (tx_valid) ? 1'b0 : 1'b1;
+  end
+
+  // FSM next state logic
+  always @(state, cnt, CS, tx_valid) begin
+    case(state)
       DATA: begin
-        if(cnt == 0) begin
-          if (mode_reg[0]) inc_cnt <= data_reg[11:7];
-        end else data_reg <= {MISO, data_reg[14:1]};
-        
-        if (cnt == 1) begin
-          if (!mode_reg[0] || (mode_reg[0] && (inc_cnt == 5'b00001 || inc_cnt == 5'b00000 || data_reg[6:2] == 5'b11111))) CS <= 1;
+        if (cnt == 17) begin
+          if (CS) next_state = IDLE;
+          else next_state = DATA_INC;
         end
-        
-        if (cnt == 18) begin
-          cnt <= 0;
-          if (!mode_reg[0] || CS) state <= IDLE;
-          else begin
-            state <= DATA_INC;
-            inc_cnt <= inc_cnt - 2;
-          end
-          rx_ready <= !mode_reg[1];
-	        Data_out <= data_reg[14:7];
-        end else cnt <= cnt + 1;
       end
 
       DATA_INC: begin
-        MOSI_en <= 0;
-        data_reg <= {MISO, data_reg[14:1]};
-        if (cnt == 0 && (data_reg[14] == 1 || !inc_cnt)) CS <= 1;
-        if (cnt == 8) begin
-          if (CS || !inc_cnt) begin
-           state <= IDLE;
-          end else inc_cnt <= inc_cnt - 1;
-          cnt <= 0;
-          rx_ready <= !mode_reg[1];
-	        Data_out <= data_reg[14:7];
-        end else begin 
-          cnt <= cnt + 1;
-          rx_ready <= 0;
-        end
-      end 
+        if (cnt == 9 && CS) next_state = IDLE;
+      end
 
       IDLE: begin
         if (tx_valid) begin
-          CS <= 0;
-          rx_ready <= 0;
-          data_reg <= Data_in;
-          mode_reg <= Data_in[1:0];
-          MOSI_en <= 1;
-          state <= DATA;
+          mode_reg <= Data_in[1:0];//leave here or not?
         end
+        if (CS == 0) next_state = DATA;
       end
+
       default: begin
-        state <= IDLE;
+        next_state = IDLE;
       end
     endcase
   end
-
 endmodule
