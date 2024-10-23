@@ -3,12 +3,12 @@ module spi_master(
   input  wire        clk,
   input  wor         MISO,
   input  wire [14:0] Data_in,
-  input  wire        tx_valid,
+  input  wire        data_in_valid,
   input  wire        CS_Sel,
   output wire        CS0,
   output wire        CS1,
   output wire        MOSI,
-  output reg         rx_ready,
+  output reg         data_out_valid,
   output reg   [7:0] Data_out
 );
 
@@ -21,10 +21,11 @@ module spi_master(
   reg [14:0] data_reg;
   reg  [1:0] mode_reg;
   reg  [4:0] cnt;
-  reg  [4:0] inc_cnt;
   reg  [1:0] state;
   reg  [1:0] next_state;
   reg        CS;
+  reg  [4:0] inc_cnt;
+  reg        MOSI_en;
 
   // sets CS0 or CS1 to CS depending on CS_Sel
   demux_2_to_1 CS_ctrl(
@@ -43,13 +44,13 @@ module spi_master(
   end
 
   assign MOSI = (state == DATA) ? data_reg[0] : 1'b0;
-  
-  // sets rx_ready to 1 when read mode, sets to 0 if not
+
+  // sets data_out_valid to 1 when read mode and data from slave recieved, sets to 0 if not
   always @(negedge rst, posedge clk) begin
     if (!rst) begin
-      rx_ready <= 0;
+      data_out_valid <= 0;
     end else begin
-      rx_ready <= (state == DATA && cnt == 17) ? !mode_reg[1] :
+      data_out_valid <= (state == DATA && cnt == 17) ? !mode_reg[1] :
                   (state == DATA_INC && cnt == 9) ? 1'b1 :
                    1'b0;
     end
@@ -65,7 +66,7 @@ module spi_master(
   end
 
   // increment counter process: sets inc_cnt at the start of transmission, 
-  //                            reduces inc_cnt depending in state;
+  //                            reduces inc_cnt depending on state;
   always @(negedge rst, posedge clk) begin
     if (!rst) begin
       inc_cnt <= 5'b00000;
@@ -79,7 +80,7 @@ module spi_master(
   always @(negedge rst, posedge clk) begin 
     if (!rst) begin
       data_reg <= 0;
-    end else if (state == IDLE && tx_valid) data_reg <= Data_in;
+    end else if (state == IDLE && data_in_valid) data_reg <= Data_in;
     else if (state == DATA || state == DATA_INC) data_reg <= {MISO, data_reg[14:1]};
   end
 
@@ -94,9 +95,9 @@ module spi_master(
     end
   end
 
-  // cheap select process: sets CS to 1 when it is not incremented read or write mode, 
-  //                                         the end of memory was reached in incremented read mode,
-  //                                         the proper count of data was read in incremented read mode,
+  // CS process: sets CS to 1 when it is not incremented read or write mode, 
+  //                               the end of memory was reached in incremented read mode,
+  //                               the proper count of data was read in incremented read mode,
   //                       sets CS to 0 when state is IDLE and there is valid data input;
   always @(negedge rst, posedge clk) begin 
     if (!rst) begin
@@ -105,11 +106,11 @@ module spi_master(
       CS <= (!mode_reg[0] || (mode_reg[0] && (inc_cnt == 5'b00001 || inc_cnt == 5'b00000 || data_reg[5:1] == 5'b11111))) ? 1'b1 : 1'b0;      
     end else if (state == DATA_INC && cnt == 0) begin
       CS <= (data_reg[14] == 1 || !inc_cnt) ? 1'b1 : 1'b0;
-    end else if (state == IDLE) CS <= (tx_valid) ? 1'b0 : 1'b1;
+    end else if (state == IDLE) CS <= (data_in_valid) ? 1'b0 : 1'b1;
   end
 
   // FSM next state logic
-  always @(state, cnt, CS, tx_valid) begin
+  always @(*) begin
     case(state)
       DATA: begin
         if (cnt == 17) begin
@@ -123,7 +124,7 @@ module spi_master(
       end
 
       IDLE: begin
-        if (tx_valid) begin
+        if (data_in_valid) begin
           mode_reg <= Data_in[1:0];//leave here or not?
         end
         if (CS == 0) next_state = DATA;

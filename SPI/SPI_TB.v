@@ -1,25 +1,16 @@
 module spi_tb ();
 
-  reg        clk;
-  reg        rst;
-  reg        CS_sel;
-  reg        valid;
+  reg  clk;
+  reg  rst;
+  wire MOSI;
+  reg  CS_sel;
+  reg  valid;
+  wire MISO;
+  wire CS0;
+  wire CS1;
+  wire ready;
+  wire data_valid;
   reg [14:0] data_in;
-  wire       MOSI;
-  wire       MISO;
-  wire       CS0;
-  wire       CS1;
-  wire       ready;
-  wire [7:0] ram_in_0;
-  wire [7:0] ram_out_0;
-  wire [7:0] ram_in_1;
-  wire [7:0] ram_out_1;
-  wire [7:0] data_out;
-  wire [4:0] addr_0;
-  wire [4:0] addr_1;
-  wire       mode_0;
-  wire       mode_1;
-  
   parameter N=8;
   parameter M=32;
 
@@ -37,7 +28,10 @@ module spi_tb ();
 
   initial begin
        valid = 1; //memory 1
-       data_in = 15'b000000000000010; // data = 00, addr = 0,  mode = WR
+       data_in = 15'b100010000001110; // data = 00, addr = 3,  mode = WR
+  #200 data_in = 15'b000100010001100; // data = 11, addr = 3,  mode = RD
+
+  #200 data_in = 15'b000000000000010; // data = 00, addr = 0,  mode = WR
   #200 data_in = 15'b000100010000110; // data = 11, addr = 1,  mode = WR
   #200 data_in = 15'b001000100001010; // data = 22, addr = 2,  mode = WR
   #200 data_in = 15'b001100110001110; // data = 33, addr = 3,  mode = WR
@@ -71,58 +65,34 @@ module spi_tb ();
   #200 data_in = 15'b000001010000101; // addr = 1, mode = RD with increment (n = 5), 
   end
 
-  RAM #(N,M) i_ram_0(
-    .clk(clk),
-    .Data_in(ram_in_0),
-    .WE(mode_0),
-    .Addr(addr_0),
-    .Data_out(ram_out_0)
-  );
-
-  spi_slave_ctrl i_slave_0(
+  spi_slave i_slave_0(
     .rst(rst),
     .clk(clk),
     .MISO(MISO),
     .CS(CS0),
-    .Data_in(ram_out_0),
-    .MOSI(MOSI),
-    .Data_out(ram_in_0),
-    .Addr(addr_0),
-    .WE(mode_0)
-);
-
-  RAM #(N,M) i_ram_1(
-    .clk(clk),
-    .Data_in(ram_in_1),
-    .WE(mode_1),
-    .Addr(addr_1),
-    .Data_out(ram_out_1)
+    .MOSI(MOSI)
   );
 
-  spi_slave_ctrl i_slave_1(
+  spi_slave i_slave_1(
     .rst(rst),
     .clk(clk),
     .MISO(MISO),
     .CS(CS1),
-    .Data_in(ram_out_1),
-    .MOSI(MOSI),
-    .Data_out(ram_in_1),
-    .Addr(addr_1),
-    .WE(mode_1)
-);
+    .MOSI(MOSI)
+  );
 
   spi_master i_master(
     .rst(rst),
     .clk(clk),
     .MISO(MISO),
     .Data_in(data_in),
-    .tx_valid(valid),
+    .data_in_valid(valid),
     .CS_Sel(CS_sel),
     .CS0(CS0),
     .CS1(CS1),
     .MOSI(MOSI),
-    .rx_ready(ready),
+    .data_out_valid(data_valid),
     .Data_out(data_out)
-);
+  );
 
 endmodule

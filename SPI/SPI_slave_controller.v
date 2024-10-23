@@ -30,7 +30,7 @@ module spi_slave_ctrl(
   assign Addr = addr_reg;
   assign MISO = (state == DATA_RD || state == DATA_RD_INC) ? data_reg[0] : 1'b0;   // disables MISO when not needed
 
-  always @(negedge rst, posedge clk) begin
+   always @(negedge rst, posedge clk) begin
     if (!rst) begin
       state <= IDLE;
     end else begin
@@ -39,7 +39,7 @@ module spi_slave_ctrl(
   end
 
   // FSM next state logic
-  always @(state, mode_reg, CS, cnt) begin
+  always @(*) begin
     case(state)
 
       INF_BITS: begin
@@ -71,7 +71,7 @@ module spi_slave_ctrl(
         else next_state = state;
       end
       default: begin
-	      next_state = IDLE;   //i don't know what will be better here;
+	next_state = IDLE;
       end
     endcase
   end
@@ -119,9 +119,7 @@ module spi_slave_ctrl(
   end
   
   // write enable
-  assign WE = (state == DATA_WR && cnt == 9) ? 1'b1 : 1'b0;
+  assign WE = (state == DATA_WR && cnt == 9) ? 1 : 0;
 
 endmodule
-
-
 
