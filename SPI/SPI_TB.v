@@ -6,6 +6,8 @@ module spi_tb ();
   reg  CS_sel;
   reg  valid;
   wire MISO;
+  wire MISO0;
+  wire MISO1;
   wire CS0;
   wire CS1;
   wire ready;
@@ -14,6 +16,8 @@ module spi_tb ();
   parameter N=8;
   parameter M=32;
 
+  assign MISO = MISO0 || MISO1;
+  
   initial begin
     clk = 0;
     forever #5 clk = ~clk;
@@ -68,7 +72,7 @@ module spi_tb ();
   spi_slave i_slave_0(
     .rst(rst),
     .clk(clk),
-    .MISO(MISO),
+    .MISO(MISO0),
     .CS(CS0),
     .MOSI(MOSI)
   );
@@ -76,7 +80,7 @@ module spi_tb ();
   spi_slave i_slave_1(
     .rst(rst),
     .clk(clk),
-    .MISO(MISO),
+    .MISO(MISO1),
     .CS(CS1),
     .MOSI(MOSI)
   );

@@ -44,11 +44,11 @@ module spi_slave_ctrl(
 
       INF_BITS: begin
         if (cnt == 6) begin
-          next_state = (mode_reg == 0'b01) ? DATA_RD_INC :
-                       (mode_reg == 0'b00) ? DATA_RD :
-                       (mode_reg == 0'b10) ? DATA_WR :
-                       state;
-        end
+          if (mode_reg == 2'b01) next_state = DATA_RD_INC;
+          else if (mode_reg == 2'b00) next_state = DATA_RD;
+          else if (mode_reg == 2'b10 || mode_reg == 2'b11) next_state = DATA_RD;
+          else next_state = IDLE;  
+        end else next_state = state; 
       end
 
       DATA_RD: begin
@@ -70,8 +70,9 @@ module spi_slave_ctrl(
         if (!CS) next_state = INF_BITS;
         else next_state = state;
       end
+      
       default: begin
-	next_state = IDLE;
+	    next_state = IDLE;
       end
     endcase
   end
@@ -96,7 +97,7 @@ module spi_slave_ctrl(
     if (!rst) data_reg <= 8'b00000000;
     else if ((state == DATA_RD || state == DATA_RD_INC) && cnt == 1) data_reg <= Data_in;
     else if (state == DATA_RD_INC && cnt == 9) begin
-      data_reg <= (addr_reg == 5'b11111) ? {data_reg[7:1], 1} : {data_reg[7:1], 0};
+      data_reg <= (addr_reg == 5'b11111) ? {data_reg[7:1], 1'b1} : {data_reg[7:1], 1'b0};
     end else if (state == DATA_RD || state == DATA_RD_INC || state == DATA_WR) data_reg <= {MOSI, data_reg[7:1]};
   end
 

@@ -1,7 +1,7 @@
 module spi_master(
   input  wire        rst,
   input  wire        clk,
-  input  wor         MISO,
+  input  wire        MISO,
   input  wire [14:0] Data_in,
   input  wire        data_in_valid,
   input  wire        CS_Sel,
@@ -25,7 +25,6 @@ module spi_master(
   reg  [1:0] next_state;
   reg        CS;
   reg  [4:0] inc_cnt;
-  reg        MOSI_en;
 
   // sets CS0 or CS1 to CS depending on CS_Sel
   demux_2_to_1 CS_ctrl(
@@ -108,6 +107,14 @@ module spi_master(
       CS <= (data_reg[14] == 1 || !inc_cnt) ? 1'b1 : 1'b0;
     end else if (state == IDLE) CS <= (data_in_valid) ? 1'b0 : 1'b1;
   end
+  
+  always @(negedge rst, posedge clk) begin 
+    if (!rst) begin
+      mode_reg <= 1'b1;
+    end else if (state == IDLE && data_in_valid) begin
+       mode_reg <= Data_in[1:0];
+    end
+  end
 
   // FSM next state logic
   always @(*) begin
@@ -116,20 +123,19 @@ module spi_master(
         if (cnt == 17) begin
           if (CS) next_state = IDLE;
           else next_state = DATA_INC;
-        end
+        end else next_state = state;
       end
 
       DATA_INC: begin
         if (cnt == 9 && CS) next_state = IDLE;
+        else next_state = state;
       end
 
       IDLE: begin
-        if (data_in_valid) begin
-          mode_reg <= Data_in[1:0];//leave here or not?
-        end
         if (CS == 0) next_state = DATA;
+        else next_state = state;
       end
-
+      
       default: begin
         next_state = IDLE;
       end

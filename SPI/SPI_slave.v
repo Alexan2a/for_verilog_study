@@ -1,9 +1,9 @@
 module spi_slave (
   input  wire rst,
   input  wire clk,
-  input  wire MISO,
+  input  wire MOSI,
   input  wire CS,
-  output wire MOSI
+  output wire MISO
 );
 
   wire [7:0] ram_out;
@@ -14,7 +14,7 @@ module spi_slave (
   parameter N=8;
   parameter M=32;
 
-spi_slave_ctrl i_slave_ctrl(
+  spi_slave_ctrl i_slave_ctrl(
     .rst(rst),
     .clk(clk),
     .MISO(MISO),
@@ -24,7 +24,7 @@ spi_slave_ctrl i_slave_ctrl(
     .Data_out(ram_in),
     .Addr(addr),
     .WE(WE)
-);
+  );
 
   RAM #(N,M) i_ram(
     .clk(clk),
