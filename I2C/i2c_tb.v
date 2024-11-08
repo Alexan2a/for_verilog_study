@@ -12,7 +12,8 @@ module tb();
   tri        sda;
   tri        scl;
 
-  parameter C = 1;
+  parameter A = 1;
+  parameter B = 2;
   parameter N = 8;
   parameter M = 32;
 
@@ -35,38 +36,67 @@ module tb();
  end
 
  initial begin
-  #26 addr = 2;           
+  #26 addr = 1;
       rw = 1;
       mem_addr = 0;
       data_wr = 8'h00;
 
-  #260 mem_addr = 1;
+  #280 mem_addr = 1;
        data_wr = 8'h11;
- #5    addr = 1;
-  #260 mem_addr = 2;
+
+  #280 mem_addr = 2;
        data_wr = 8'h22;
 
-  #260 mem_addr = 3;
+  #280 mem_addr = 3;
        data_wr = 8'h33;
 
-  #260 mem_addr = 4;
-       data_wr = 8'h44;
+  #280 mem_addr = 0;
+       data_wr = 8'hAA;
+       addr = 2;
 
-  #260 mem_addr = 5;
+  #280 mem_addr = 2;
+       data_wr = 8'hCC;
+
+  #280 mem_addr = 1;
+       data_wr = 8'hBB;
+
+  #280 mem_addr = 3;
+       data_wr = 8'hDD;
+
+  #280 mem_addr = 5;
+       data_wr = 8'hFF;
+
+  #280 mem_addr = 4;
+       data_wr = 8'hEE;
+
+  #280 mem_addr = 4;
+       data_wr = 8'h44;
+       addr = 1;
+
+  #280 mem_addr = 5;
        data_wr = 8'h55;
 
-  #260 mem_addr = 6;
+  #280 mem_addr = 6;
        data_wr = 8'h66;
  
-  #260 mem_addr = 7;
+  #280 mem_addr = 7;
        data_wr = 8'h77;
 
-  #260 mem_addr = 8;
+  #280 mem_addr = 8;
        data_wr = 8'h88;
 
-  #260 rw = 0;
+  #280 rw = 0;
 
-  #260 mem_addr = 3;
+  #280 mem_addr = 3;
+
+  #280 mem_addr = 5;
+
+  #280 mem_addr = 0;
+       addr = 2;
+
+  #280 mem_addr = 1;
+
+  #280 mem_addr = 2;
  end
 
 
@@ -85,12 +115,18 @@ module tb();
     .scl(scl)
   );
 
-  i2c_slave #(C) i_slave(
+  i2c_slave #(A) i_slave_0(
     .clk(clk),
     .rst(rst),
     .scl(scl),
     .sda(sda)
   );
 
+  i2c_slave #(B) i_slave_1(
+    .clk(clk),
+    .rst(rst),
+    .scl(scl),
+    .sda(sda)
+  );
 
 endmodule
