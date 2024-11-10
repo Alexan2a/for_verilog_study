@@ -1,19 +1,19 @@
-module i2c_slave #(parameter A) (
+module i2c_slave #(parameter ADDR=0)(
   input  wire clk,
   input  wire rst,
   input  tri1 scl,
   inout  tri1 sda
 );
 
-  parameter N = 8;
-  parameter M = 32;
+  localparam N = 8;
+  localparam M = 32;
 
   wire [7:0] d_out;
   wire [7:0] d_in;
   wire [4:0] m_addr;
   wire       WE;
 
-  i2c_slave_contr #(A) i_slave(
+  i2c_slave_contr #(ADDR) i_slave(
     .clk(clk),
     .rst(rst),
     .scl(scl),
