@@ -2,15 +2,22 @@ module i2c_master (
   input  wire       clk,
   input  wire       rst,
   input  wire       en,
+
   input  wire [6:0] addr,
   input  wire       rw,
   input  wire [4:0] mem_addr,
   input  wire [7:0] data_wr,
   output wire [7:0] data_rd,
+
   output wire       ack_err,
   output wire       busy,
-  inout  tri1       sda,
-  inout  tri1       scl
+
+  input  wire       sda_i,
+  output wire       sda_o,
+  output wire       sda_t,
+  input  wire       scl_i,
+  output wire       scl_o,
+  output wire       scl_t
 );
 
   localparam IDLE     = 0;
@@ -38,19 +45,12 @@ module i2c_master (
   reg [3:0]  state;
   reg [3:0]  next_state;
 
-  reg  sda_r;
-  reg  scl_r;
-  wire scl_t;
-
   assign data_rd = data_rd_r;
   assign ack_err = ack_err_r;
 
   assign busy = (state == IDLE) ? 1'b0 : 1'b1;
   
-  assign sda = (sda_r) ? 1'bz : 1'b0;
-  assign scl = (scl_t) ? 1'bz : scl_r;
-  
-
+  // start and stop bits, else scl = clk 
   assign scl_t = (state == START2)  ? 1'b0 :
                  (state == DATA)    ? 1'b0 :
                  (state == DATA_RD) ? 1'b0 :
@@ -61,25 +61,22 @@ module i2c_master (
                  (state == STOP1)   ? 1'b0 : 
                   1'b1;
 
-  // start and stop bits, sda transmission when DATA or DATA_WR states 
-  always @(*) begin
-    if (state == START1 || state == START2 || state == STOP1 || state == STOP2) begin
-      sda_r = 1'b0;
-    end else if (state == DATA || state == DATA_WR) begin
-      sda_r = tx_r[0];
-    end else
-      sda_r = 1'b1;
-  end
+  assign scl_o = (state == START2)  ? 1'b0 :
+                 (state == DATA)    ? clk :
+                 (state == DATA_RD) ? clk :
+                 (state == DATA_WR) ? clk :
+                 (state == DATAEND1)? clk : 
+                 (state == DATAEND2)? 1'b0 : 
+                 (state == DELAY)   ? clk : 
+                 (state == STOP1)   ? 1'b0 : 
+                  1'b1;
 
-  // start and stop bits, else scl = clk 
-  always @(*) begin
-    if (state == START2 || state == STOP1) begin
-      scl_r = 1'b0;
-    end else if (state != IDLE) begin
-      scl_r = clk;
-    end else 
-      scl_r = 1'b1;
-  end
+  // start and stop bits, sda transmission when DATA or DATA_WR states 
+   assign sda_t = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || state == DATA || state == DATA_WR) ? 1'b0 : 1'b1;
+
+   assign sda_o = (state == START1 || state == START2 || state == STOP1 || state == STOP2) ? 1'b0 :
+                  (state == DATA || state == DATA_WR)? tx_r[0] :
+                   1'b1;
 
   // if nack acc_err 1, else 0
   always @(posedge clk, negedge rst) begin
@@ -87,10 +84,10 @@ module i2c_master (
       ack_err_r <= 1'b0;
     end else begin
       if (state == DATAEND1) begin
-        if (sda == 0) ack_err_r <= 1'b0;
+        if (sda_i == 0) ack_err_r <= 1'b0;
         else ack_err_r <= 1'b1; 
       end else if (state == DATAEND2 && rw_r) begin
-        if (sda == 0) ack_err_r <= 1'b0; 
+        if (sda_i == 0) ack_err_r <= 1'b0; 
         else ack_err_r <= 1'b1;   
       end 
     end
@@ -120,7 +117,7 @@ module i2c_master (
     if (!rst) begin
       bit_cnt <= 4'b0;
     end else begin
-      if (!scl) bit_cnt <= (state == DATA || state == DATA_WR || state == DATA_RD  || state == DELAY) ? bit_cnt + 1 : 4'b0;
+      if (scl_i) bit_cnt <= (state == DATA || state == DATA_WR || state == DATA_RD  || state == DELAY) ? bit_cnt + 1 : 4'b0;
     end
   end
 
@@ -130,7 +127,7 @@ module i2c_master (
       tx_r <= 13'b0;
     end else begin
       if (state == DATA || state == DATA_WR) begin
-        if (!scl) tx_r <= tx_r >> 1;
+        if (scl_i) tx_r <= tx_r >> 1;
       end else if (!busy && en) begin
         tx_r <= {addr, mem_addr, rw};
       end else if (state == DATAEND1 && rw_r && !ack_err) begin
@@ -145,7 +142,7 @@ module i2c_master (
       rx_r <= 8'b0;
     end else begin
       if (state == DATA_RD) begin
-         if (!scl) rx_r <= {sda, rx_r[7:1]};
+        if (scl_i) rx_r <= {sda_i, rx_r[7:1]};
       end 
     end
   end
@@ -193,7 +190,7 @@ module i2c_master (
         end
       end
       DATAEND1: begin
-        if (sda == 0) begin
+        if (sda_i == 0) begin
           next_state = (rw_r == 1'b1) ? DATA_WR : DELAY;
         end else begin
           next_state = STOP1;

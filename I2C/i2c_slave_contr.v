@@ -1,8 +1,12 @@
 module i2c_slave_contr #(parameter ADDR=0) (
   input  wire       clk,
   input  wire       rst,
-  input  tri1       scl,
-  inout  tri1       sda,
+
+  input  wire       scl,
+  input  wire       sda_i,
+  output wire       sda_o,
+  output wire       sda_t,
+
   input  wire [7:0] data_in,
   output wire       WE,
   output wire [4:0] mem_addr,
@@ -36,8 +40,6 @@ module i2c_slave_contr #(parameter ADDR=0) (
   reg [3:0] state;
   reg [3:0] next_state;
 
-  reg  sda_r;
-
   assign mem_addr = mem_addr_r;
   assign WE = WE_r;
   assign data_out = data_out_r;
@@ -56,18 +58,18 @@ module i2c_slave_contr #(parameter ADDR=0) (
     if (!rst) begin
       stop_bit_1 <= 1'b0;
     end
-    stop_bit_1 <= scl && !sda;
+    stop_bit_1 <= scl && !sda_i;
   end
 
+  assign sda_t = (state == DATAEND1 && rx_r[12:6] == addr_r) ? 1'b0 :
+                 (state == DATAEND2 && rw_r) ? 1'b0 :
+                 (state == DATA_RD) ? 1'b0 : 
+                  1'b1;
 
-  assign sda = (sda_r) ? 1'bz : 1'b0;
-
-  always @(*) begin
-    sda_r = (state == DATAEND1 && rx_r[12:6] == addr_r) ? 1'b0 :
-            (state == DATAEND2 && rw_r) ? 1'b0 :
-            (state == DATA_RD) ? tx_r[0] :
-             1'b1;
-  end
+  assign sda_o = (state == DATAEND1 && rx_r[12:6] == addr_r) ? 1'b0 :
+                 (state == DATAEND2 && rw_r) ? 1'b0 :
+                 (state == DATA_RD) ? tx_r[0] :
+                  1'b1;
 
   //sets registers to recieved data
   always @(posedge clk, negedge rst) begin
@@ -97,7 +99,7 @@ module i2c_slave_contr #(parameter ADDR=0) (
       rx_r <= 13'b0;
     end else begin
       if (state == DATA_WR || state == DATA) begin
-        rx_r <= {sda, rx_r[12:1]};
+        rx_r <= {sda_i, rx_r[12:1]};
       end 
     end
   end
@@ -107,7 +109,7 @@ module i2c_slave_contr #(parameter ADDR=0) (
     if (!rst) begin
       tx_r <= 13'b0;
     end else begin
-      if (state == DELAY && bit_cnt == 1) begin
+      if (state == DELAY /*&& bit_cnt == 1*/) begin
         tx_r <= data_in;
       end if (state == DATA_RD) begin
         tx_r <= tx_r >> 1;
@@ -143,11 +145,11 @@ module i2c_slave_contr #(parameter ADDR=0) (
   always @(*) begin
     case(state)
       IDLE: begin
-        if (!sda && scl) next_state = START;
+        if (!sda_i && scl) next_state = START;
         else next_state = IDLE;
       end
       START: begin
-        if (!sda && !scl) next_state = DATA;
+        if (!sda_i && !scl) next_state = DATA;
         else next_state = IDLE;
       end
       DATA: begin

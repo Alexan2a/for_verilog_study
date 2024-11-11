@@ -1,8 +1,11 @@
 module i2c_slave #(parameter ADDR=0)(
   input  wire clk,
   input  wire rst,
-  input  tri1 scl,
-  inout  tri1 sda
+
+  input  wire scl,
+  input  wire sda_i,
+  output wire sda_o,
+  output wire sda_t
 );
 
   localparam N = 8;
@@ -17,7 +20,9 @@ module i2c_slave #(parameter ADDR=0)(
     .clk(clk),
     .rst(rst),
     .scl(scl),
-    .sda(sda),
+    .sda_i(sda_i),
+    .sda_o(sda_o),
+    .sda_t(sda_t),
     .data_out(d_out),
     .WE(WE),
     .mem_addr(m_addr),

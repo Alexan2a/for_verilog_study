@@ -9,8 +9,20 @@ module tb();
   wire [7:0] data_rd;
   wire       ack_err;
   wire       busy;
-  tri        sda;
-  tri        scl;
+  wire sda_i;
+  wire sda_o;
+  wire sda_t;
+  wire sda_i_0;
+  wire sda_o_0;
+  wire sda_t_0;
+  wire sda_i_1;
+  wire sda_o_1;
+  wire sda_t_1;
+  wire sda;
+  wire scl_i;
+  wire scl_o;
+  wire scl_t;
+  wire scl;
 
   parameter A = 1;
   parameter B = 2;
@@ -111,22 +123,58 @@ module tb();
     .data_rd(data_rd),
     .ack_err(ack_err),
     .busy(busy),
-    .sda(sda),
-    .scl(scl)
+    .sda_i(sda_i),
+    .sda_o(sda_o),
+    .sda_t(sda_t),
+    .scl_i(scl_i),
+    .scl_o(scl_o),
+    .scl_t(scl_t)
+  );
+
+  tristate_BUF i_tri_master_sda (
+    .I(sda_i),
+    .O(sda_o),
+    .T(sda_t), 
+    .IO(sda)
+  );
+
+  tristate_BUF i_tri_master_scl (
+    .I(scl_i),
+    .O(scl_o),
+    .T(scl_t), 
+    .IO(scl)
   );
 
   i2c_slave #(A) i_slave_0(
     .clk(clk),
     .rst(rst),
     .scl(scl),
-    .sda(sda)
+    .sda_i(sda_i_0),
+    .sda_o(sda_o_0),
+    .sda_t(sda_t_0)
+  );
+
+  tristate_BUF i_tri_0 (
+    .I(sda_i_0),
+    .O(sda_o_0),
+    .T(sda_t_0), 
+    .IO(sda)
   );
 
   i2c_slave #(B) i_slave_1(
     .clk(clk),
     .rst(rst),
     .scl(scl),
-    .sda(sda)
+    .sda_i(sda_i_1),
+    .sda_o(sda_o_1),
+    .sda_t(sda_t_1)
+  );
+
+  tristate_BUF i_tri_1 (
+    .I(sda_i_1),
+    .O(sda_o_1),
+    .T(sda_t_1), 
+    .IO(sda)
   );
 
 endmodule
