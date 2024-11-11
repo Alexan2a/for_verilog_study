@@ -145,7 +145,7 @@ module i2c_master (
       rx_r <= 8'b0;
     end else begin
       if (state == DATA_RD) begin
-        rx_r <= {sda, rx_r[7:1]};
+         if (!scl) rx_r <= {sda, rx_r[7:1]};
       end 
     end
   end
