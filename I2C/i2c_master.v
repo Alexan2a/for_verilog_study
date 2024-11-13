@@ -72,11 +72,11 @@ module i2c_master (
                   1'b1;
 
   // start and stop bits, sda transmission when DATA or DATA_WR states 
-   assign sda_t = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || state == DATA || state == DATA_WR) ? 1'b0 : 1'b1;
+   assign sda_t = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || state == DATA || state == DATA_WR || state == DELAY) ? 1'b0 : 1'b1;
 
    assign sda_o = (state == START1 || state == START2 || state == STOP1 || state == STOP2) ? 1'b0 :
                   (state == DATA || state == DATA_WR)? tx_r[0] :
-                   1'b1;
+                  1'b1;
 
   // if nack acc_err 1, else 0
   always @(posedge clk, negedge rst) begin
@@ -117,7 +117,12 @@ module i2c_master (
     if (!rst) begin
       bit_cnt <= 4'b0;
     end else begin
-      if (scl_i) bit_cnt <= (state == DATA || state == DATA_WR || state == DATA_RD  || state == DELAY) ? bit_cnt + 1 : 4'b0;
+      if (scl_i) begin
+        if (state == DATA_WR && bit_cnt == 7) bit_cnt <= 4'b0;
+        else if (state == DATA_RD && bit_cnt == 9) bit_cnt <= 4'b0;
+        else if (state == DATA || state == DATA_WR || state == DATA_RD  || state == DELAY) bit_cnt <= bit_cnt + 1; 
+        else bit_cnt <= 4'b0;
+      end
     end
   end
 

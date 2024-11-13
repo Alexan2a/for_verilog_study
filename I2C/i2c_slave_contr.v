@@ -2,7 +2,9 @@ module i2c_slave_contr #(parameter ADDR=0) (
   input  wire       clk,
   input  wire       rst,
 
-  input  wire       scl,
+  input  wire       scl_i,
+  output wire       scl_o,
+  output wire       scl_t,
   input  wire       sda_i,
   output wire       sda_o,
   output wire       sda_t,
@@ -31,8 +33,10 @@ module i2c_slave_contr #(parameter ADDR=0) (
   reg [3:0] bit_cnt;
   reg       rw_r;
 
-  reg       stop_bit_1;
-  wire      stop_bit_2;
+  reg       scl_prev;
+  reg       stop2;
+  reg       stop1;
+  reg       start;
 
   reg [12:0]rx_r;
   reg [7:0] tx_r;
@@ -44,6 +48,8 @@ module i2c_slave_contr #(parameter ADDR=0) (
   assign WE = WE_r;
   assign data_out = data_out_r;
 
+  assign scl_t = 1'b1;
+  assign scl_o = 1'b0;
   //set address of device
   always @(negedge rst) begin
     if (!rst) begin
@@ -51,14 +57,26 @@ module i2c_slave_contr #(parameter ADDR=0) (
     end 
   end
  
+//catch START sign
+  always @(negedge sda_i or negedge scl_i ) begin
+      if (~scl_i) start <=0;
+      else start <= 1'b1;
+   end 
   //catch STOP signs
-  assign stop_bit_2 = stop_bit_1 && scl;
+  //assign stop2 = stop_bit_1 && scl_i;
+  always @(*) begin
+    if (!scl_i) stop2 = 1'b0;
+    else stop2 = stop1;
+  end
 
   always @(posedge clk, negedge rst) begin
     if (!rst) begin
-      stop_bit_1 <= 1'b0;
+      stop1 <= 1'b0;
+    end else begin
+      if (!scl_i) stop1 <= 1'b0;
+      else if (!sda_i) stop1 <= 1'b1;
+      else stop1 <= 1'b0;
     end
-    stop_bit_1 <= scl && !sda_i;
   end
 
   assign sda_t = (state == DATAEND1 && rx_r[12:6] == addr_r) ? 1'b0 :
@@ -89,12 +107,17 @@ module i2c_slave_contr #(parameter ADDR=0) (
     if (!rst) begin
       bit_cnt <= 4'b0;
     end else begin
-      bit_cnt <= (state == DATA || state == DATA_WR || state == DATA_RD || state == DELAY) ? bit_cnt + 1 : 4'b0;
+      if (scl_i) begin
+        if (state == DATA_WR && bit_cnt == 7) bit_cnt <= 4'b0;
+        else if (state == DATA_RD && bit_cnt == 9) bit_cnt <= 4'b0;
+        else if (state == DATA || state == DATA_WR || state == DATA_RD || state == DELAY) bit_cnt <= bit_cnt + 1;
+        else bit_cnt <= 4'b0;
+      end
     end
   end
 
   //rx_r shift (sda input) when state is DATA or DATA_RD
-  always @(posedge scl, negedge rst) begin
+  always @(posedge scl_i, negedge rst) begin
     if (!rst) begin
       rx_r <= 13'b0;
     end else begin
@@ -105,11 +128,11 @@ module i2c_slave_contr #(parameter ADDR=0) (
   end
 
   //tx_r shift (sda output) when state is DATA_WR
-  always @(posedge scl, negedge rst) begin
+  always @(posedge scl_i, negedge rst) begin
     if (!rst) begin
       tx_r <= 13'b0;
     end else begin
-      if (state == DELAY /*&& bit_cnt == 1*/) begin
+      if (state == DELAY) begin
         tx_r <= data_in;
       end if (state == DATA_RD) begin
         tx_r <= tx_r >> 1;
@@ -123,7 +146,7 @@ module i2c_slave_contr #(parameter ADDR=0) (
       WE_r <= 1'b0;
       data_out_r <= 8'b0;
     end else begin
-      if (state == HOLD && stop_bit_2) begin
+      if (state == HOLD && stop2) begin
         if (rw_r) begin
           WE_r <= 1'b1;
           data_out_r <= rx_r[12:5];
@@ -145,12 +168,11 @@ module i2c_slave_contr #(parameter ADDR=0) (
   always @(*) begin
     case(state)
       IDLE: begin
-        if (!sda_i && scl) next_state = START;
+        if (start)next_state = START;
         else next_state = IDLE;
       end
       START: begin
-        if (!sda_i && !scl) next_state = DATA;
-        else next_state = IDLE;
+        next_state = DATA;
       end
       DATA: begin
         if (bit_cnt == 12) begin
@@ -191,7 +213,7 @@ module i2c_slave_contr #(parameter ADDR=0) (
         end
       end
       HOLD: begin
-        if (stop_bit_2) next_state = IDLE;
+        if (stop2) next_state = IDLE;
         else next_state = state;
       end
       default: begin
