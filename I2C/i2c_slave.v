@@ -1,8 +1,5 @@
 module i2c_slave #(parameter ADDR=0)(
-  input  wire clk,
   input  wire rst,
-
-//  input  wire scl,
   input  wire scl_i,
   output wire scl_o,
   output wire scl_t,
@@ -20,7 +17,6 @@ module i2c_slave #(parameter ADDR=0)(
   wire       WE;
 
   i2c_slave_contr #(ADDR) i_slave(
-    .clk(clk),
     .rst(rst),
     .scl_i(scl_i),
     .scl_o(scl_o),
@@ -35,7 +31,7 @@ module i2c_slave #(parameter ADDR=0)(
   );
 
   RAM #(N,M) i_ram(
-    .clk(clk),
+    .clk(scl_i),
     .Data_in(d_out),
     .WE(WE),
     .Addr(m_addr),
