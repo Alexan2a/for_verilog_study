@@ -69,9 +69,9 @@ module i2c_master (
                   1'b1;
 
   // start and stop bits, sda transmission when DATA or DATA_WR states 
-   assign sda_t = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || state == DATA1 || (state == DATA2 && rw_r) || state == DELAY) ? 1'b0 : 1'b1;
+   assign sda_t = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || state == DATA1 || (state == DATA2 && rw_r) || (state == DATAEND2 && !rw_r) || state == DELAY) ? 1'b0 : 1'b1;
 
-   assign sda_o = (state == START1 || state == START2 || state == STOP1 || state == STOP2) ? 1'b0 :
+   assign sda_o = (state == START1 || state == START2 || state == STOP1 || state == STOP2 || (state == DATAEND2 && !rw_r)) ? 1'b0 :
                   (state == DATA1 || (state == DATA2 && rw_r))? tx_r[0] :
                   1'b1;
 
