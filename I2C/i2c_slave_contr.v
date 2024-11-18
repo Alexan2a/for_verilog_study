@@ -26,9 +26,9 @@ module i2c_slave_contr #(parameter ADDR=0) (
   reg       WE_r;
   reg [7:0] data_out_r;
 
-  reg [6:0] addr_r;
-  reg [3:0] bit_cnt;
-  reg       rw_r;
+  wire [6:0] addr_r;
+  reg  [3:0] bit_cnt;
+  reg        rw_r;
 
   reg [12:0]rx_r;
   reg [7:0] tx_r;
@@ -54,11 +54,7 @@ module i2c_slave_contr #(parameter ADDR=0) (
   assign scl_o = 1'b0;
 
   //set address of device
-  always @(negedge rst) begin
-    if (!rst) begin
-      addr_r <= ADDR;
-    end 
-  end
+  assign addr_r = ADDR;
 
   //catch STOP sign
   assign stop_rst = !rst | stop_resetter;
