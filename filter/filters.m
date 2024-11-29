@@ -59,10 +59,11 @@ cost(lpFIRkai)
 %получался порядок больше, чем в этом equiripple. Может я что-то не так
 %делала
 
-filtSpecs2 = fdesign.lowpass('Fp,Fst,Ap,Ast',Fc/(Fs/2),(Fc+Wt+3.4e3)/(Fs/2),Rp,Rs);
+filtSpecs2 = fdesign.lowpass('Fp,Fst,Ap,Ast',Fc/(Fs/2),(Fc+Wt+3.3e3)/(Fs/2),Rp,Rs);
 lpFIReq256 = design(filtSpecs2,'equiripple',SystemObject=true);
 
 cost(lpFIReq256)
+order(lpFIReq256)
 
 %раскомментить если нужно
 %hvft = fvtool(lpFIReq,'Fs',Fs);    %equiripple
