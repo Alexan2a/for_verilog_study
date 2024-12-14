@@ -1,0 +1,205 @@
+// I think that maybe I shoul add some sign, to prevent work of schema before coeffitients are written
+
+
+module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C = 16, parameter N=3)(
+  input  wire nrst,
+  input  wire clk,
+  //input  wire ce,
+  input  wire [S-1:0] din,
+  output wire [S-1:0] dout,
+
+  input  wire c_WE,
+  input  wire [C-1:0] c_in,
+  input  wire [$clog2((ORD+1)/2)-1:0] c_addr
+
+    //input strb_in,
+    //output strb_out
+);
+
+  //L - needed cells in MAC
+  //N - needed number of MACs
+  //D - number of periods og working rate in period fs
+  //ORD - order of filter
+  //S - sample size
+  //C - coeff size
+
+
+  //TODO:
+  //1. coeffitients add
+  //4. Part for coeffitients
+  //2. stop signal add
+  //3. check in outs
+
+  localparam L = (ORD+1)/6; // neeeds check; should be 43
+ // localparam N = $ceil(((ORD)/2)/D + 1); // should be 3
+
+  reg [S-1:0] out_r;
+  reg [S-1:0] sum_r;
+  reg         mac_s_we;
+  reg [N-1:0] mac_c_we;
+
+  reg en;
+  reg en_dl_0; ///think how better, this is for test
+  reg en_dl_1;
+  wire mac_en;
+
+  reg load;
+
+  reg [$clog2(L)-1:0] cnt_0; 
+  reg [$clog2(L)-1:0] cnt_1;
+  reg [$clog2(L)-1:0] coeff_cnt; 
+  reg [$clog2(L)-1:0] step_cnt;
+  reg [$clog2(L)-1:0] addr_0;
+  reg [$clog2(L)-1:0] addr_1;
+  reg [$clog2(L)-1:0] mac_c_addr;
+  reg [C-1:0] mac_c_in;
+
+  wire clk_fs;
+  reg clk_fs_d1;
+
+  wire [S-1:0] mac_samples[0: N*2 + 1];
+  wire [S-1:0] mac_outs[0:N-1];
+
+  clock_divider #(D) i_clk_div( //coeff 52
+    .in_clk(clk), 
+    .rst(nrst),
+    .out_clk(clk_fs)
+  );
+
+  always @(posedge clk) begin
+    clk_fs_d1 <= clk_fs;
+  end
+
+  assign mac_samples[0] = din;
+  assign mac_samples[N+1] = mac_samples[N];
+  assign mac_en = en || en_dl_1 || en_dl_0;
+  assign dout = out_r;
+
+  integer j;
+  always @(*) begin
+    sum_r = 0;
+    for(j = 0; j < N; j = j + 1) begin
+      sum_r = $signed(sum_r) + $signed(mac_outs[j]);
+    end
+  end
+
+  always @(posedge clk or negedge nrst) begin
+
+    if (!nrst) begin
+     // load <= 0;
+      cnt_0 <= 0;
+      cnt_1 <= L-1;
+      coeff_cnt <= 0;
+      step_cnt <= 0;
+      mac_c_we <= 0;
+      en <= 1;
+    end else begin
+      if (c_WE) begin //maybe should use another signal, but i want to test how my system works
+        if (c_WE) begin
+          mac_c_in <= c_in;
+          if (c_addr < L) begin
+            mac_c_addr <= c_addr;
+            mac_c_we[0] <= 1;
+            mac_c_we[1] <= 0;
+            mac_c_we[2] <= 0;
+          end else if (c_addr > L*2 - 1) begin
+            mac_c_addr <= (c_addr - L*2);
+            mac_c_we[0] <= 0;
+            mac_c_we[1] <= 0;
+            mac_c_we[2] <= 1;
+          end else begin
+            mac_c_addr <= (c_addr - L);
+            mac_c_we[0] <= 0;
+            mac_c_we[1] <= 1;
+            mac_c_we[2] <= 0;
+          end
+
+        end else begin
+          load <= 1;
+         end
+       
+      end else begin
+        mac_c_we <= 0;
+    //I'M NOT SURE ABOUT THIS COUNTERS!!!
+      // for 1'st sample memory
+        if (clk_fs_d1) cnt_0 <= step_cnt;
+        else if (cnt_0 == L-1) cnt_0 <= 0;
+        else cnt_0 <= cnt_0 + 1;
+
+      // for 2'nd sample memory
+        if (clk_fs_d1) cnt_1 <= (step_cnt == 0) ? L-1 : (step_cnt - 1);
+        else if (cnt_1 == 0) cnt_1 <= L-1;
+        else cnt_1 <= cnt_1 - 1;
+
+      // for coeffs memory
+        if (clk_fs_d1) coeff_cnt <= 0;
+        else if (coeff_cnt == L-1) coeff_cnt <= L-1;
+        else coeff_cnt <= coeff_cnt + 1;
+
+      // just to count adresses of sample memories
+        if (clk_fs_d1) begin
+          if (step_cnt == L-1) step_cnt <= 0;
+          else step_cnt <= step_cnt + 1;
+        end
+    
+      // addresses of sample memories
+        if (clk_fs || clk_fs_d1) begin
+          addr_0 <= step_cnt;    
+          addr_1 <= step_cnt;
+        end else begin
+          addr_0 <= cnt_0; 
+          addr_1 <= cnt_1;
+        end
+    
+      //coeff address
+        mac_c_addr <= coeff_cnt;
+
+        if (clk_fs || clk_fs_d1) en <= 1'b1;
+        else if (coeff_cnt == L-1) en <= 1'b0;
+        else en <= 1'b1;
+        
+        en_dl_0 <= en;
+        en_dl_1 <= en_dl_0;
+
+      // write enable
+        if (clk_fs_d1) begin
+          mac_s_we <= 1;
+        end else begin
+          mac_s_we <= 0;
+        end
+
+        if (clk_fs) begin
+          out_r <= sum_r;
+        end
+      end
+    end
+  end
+
+  
+  genvar i;
+  generate
+    for(i = 0; i < N; i = i + 1) begin
+
+      MAC #(L, C, S, D) i_MAC(
+        .clk(clk),
+        .rst(nrst),
+        .WE(mac_s_we),
+        .c_in(mac_c_in), //just to test!
+        .c_addr(mac_c_addr),
+        .c_WE(mac_c_we[i]),
+        .en(mac_en),
+        .wr_addr_0(addr_0),
+        .wr_addr_1(addr_1),
+        .rd_addr_0(addr_0),
+        .rd_addr_1(addr_1),
+        .mem_in_0(mac_samples[i]),
+        .mem_in_1(mac_samples[N*2-i]),
+        .mem_out_0(mac_samples[i+1]),
+        .mem_out_1(mac_samples[N*2-i+1]),
+        .dout(mac_outs[i])
+      );
+      
+    end
+  endgenerate
+
+endmodule
