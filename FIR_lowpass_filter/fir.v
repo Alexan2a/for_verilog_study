@@ -1,7 +1,6 @@
 module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C = 16)(
   input  wire nrst,
   input  wire clk,
-  //input  wire ce,
   input  wire [S-1:0] din,
   output wire [S-1:0] dout,
 
@@ -19,11 +18,13 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
 
   //TODO:
-  //1. Think about load
-  //2. Try 1 impulse
+  //1. Optimise
+  //2. Make this readable
+  //3. Remove unused or starnge signals
+  //4. Maybe there will be smth else to do, but I should ask
 
-  localparam L = (ORD+1)/6; // neeeds check; should be 43
-  localparam N = $ceil(((ORD)/2)/D + 1); // should be 3
+  localparam N = $ceil(((ORD)/2)/(D-3) + 1); //3 for order 257
+  localparam L = (ORD+1)/(2*N); //43 for order 257
 
   reg [S-1:0] out_r;
   reg [S-1:0] sum_r;
@@ -31,11 +32,11 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg [N-1:0] mac_c_we;
 
   reg en;
-  reg en_dl_0; ///think how better, this is for test
+  reg en_dl_0;
   reg en_dl_1;
   wire mac_en;
 
-  reg load;
+  //reg load;
 
   reg [$clog2(L)-1:0] cnt_0; 
   reg [$clog2(L)-1:0] cnt_1;
@@ -47,11 +48,13 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg [C-1:0] mac_c_in;
 
   wire clk_fs;
-  reg clk_fs_d1;
+  reg  clk_fs_dl;
 
   wire [S-1:0] mac_samples[0: N*2 + 1];
-  wire [C-1:0] mac_coeffs[0:N-1];//DELETE!!!!!!
   wire [S-1:0] mac_outs[0:N-1];
+
+  // Don't know if I need to use some flag to note, that out will be not XXXXX
+  assign dout = out_r;
 
   clock_divider #(D) i_clk_div( //coeff 52
     .in_clk(clk), 
@@ -60,14 +63,10 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   );
 
   always @(posedge clk) begin
-    clk_fs_d1 <= clk_fs;
+    clk_fs_dl <= clk_fs;
   end
 
-  assign mac_samples[0] = din;
-  assign mac_samples[N+1] = mac_samples[N];
-  assign mac_en = en || en_dl_1 || en_dl_0;
-  assign dout = out_r;
-
+  // counting sum of MAC outs (Q16.15)
   integer j;
   always @(*) begin
     sum_r = 0;
@@ -79,7 +78,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   always @(posedge clk or negedge nrst) begin
 
     if (!nrst) begin
-      load <= 0;
+      //load <= 1;s
       cnt_0 <= 0;
       cnt_1 <= L-1;
       coeff_cnt <= 0;
@@ -87,8 +86,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
       mac_c_we <= 0;
       en <= 1;
     end else begin
-      if (c_WE) begin // shoul be !load
-        if (c_WE) begin //maybe should use another signal, but i want to test how my system works
+      if (c_WE) begin //maybe should use another signal
           mac_c_in <= c_in;
           if (c_addr < L) begin
             mac_c_addr <= c_addr;
@@ -107,30 +105,30 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
             mac_c_we[2] <= 0;
           end
 
-        end else begin
+        /*end else begin
           load <= 1;
-         end
+         end*/
        
       end else begin
         mac_c_we <= 0;
-    //I'M NOT SURE ABOUT THIS COUNTERS!!!
+
       // for 1'st sample memory
-        if (clk_fs_d1) cnt_0 <= step_cnt;
+        if (clk_fs_dl) cnt_0 <= step_cnt;
         else if (cnt_0 == 0) cnt_0 <= L-1;
         else cnt_0 <= cnt_0 - 1;
 
       // for 2'nd sample memory
-        if (clk_fs_d1) cnt_1 <= (step_cnt == L-1) ? 0 : (step_cnt + 1);
+        if (clk_fs_dl) cnt_1 <= (step_cnt == L-1) ? 0 : (step_cnt + 1);
         else if (cnt_1 == L-1) cnt_1 <= 0;
         else cnt_1 <= cnt_1 + 1;
 
       // for coeffs memory
-        if (clk_fs_d1) coeff_cnt <= 0;
+        if (clk_fs_dl) coeff_cnt <= 0;
         else if (coeff_cnt == L-1) coeff_cnt <= L-1;
         else coeff_cnt <= coeff_cnt + 1;
 
       // just to count adresses of sample memories
-        if (clk_fs_d1) begin
+        if (clk_fs_dl) begin
           if (step_cnt == L-1) step_cnt <= 0;
           else step_cnt <= step_cnt + 1;
         end
@@ -144,18 +142,19 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
           addr_1 <= cnt_1;
         end
     
-      //coeff address
+        //coeff address
         mac_c_addr <= coeff_cnt;
 
-        if (clk_fs || clk_fs_d1) en <= 1'b1;
+	//enable works as ce for MACs not to calc values when not needed
+        if (clk_fs || clk_fs_dl) en <= 1'b1;
         else if (coeff_cnt == L-1) en <= 1'b0;
         else en <= 1'b1;
         
         en_dl_0 <= en;
         en_dl_1 <= en_dl_0;
 
-      // write enable
-        if (clk_fs_d1) begin
+      // write sample rams enable (when getting new sample)
+        if (clk_fs_dl) begin
           mac_s_we <= 1;
         end else begin
           mac_s_we <= 0;
@@ -168,7 +167,10 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
     end
   end
 
-  
+  assign mac_samples[0] = din;
+  assign mac_samples[N+1] = mac_samples[N];
+  assign mac_en = en || en_dl_1 || en_dl_0;
+
   genvar i;
   generate
     for(i = 0; i < N; i = i + 1) begin
