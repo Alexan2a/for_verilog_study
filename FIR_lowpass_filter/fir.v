@@ -1,7 +1,4 @@
-// I think that maybe I shoul add some sign, to prevent work of schema before coeffitients are written
-
-
-module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C = 16, parameter N=3)(
+module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C = 16)(
   input  wire nrst,
   input  wire clk,
   //input  wire ce,
@@ -11,9 +8,6 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   input  wire c_WE,
   input  wire [C-1:0] c_in,
   input  wire [$clog2((ORD+1)/2)-1:0] c_addr
-
-    //input strb_in,
-    //output strb_out
 );
 
   //L - needed cells in MAC
@@ -25,13 +19,11 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
 
   //TODO:
-  //1. coeffitients add
-  //4. Part for coeffitients
-  //2. stop signal add
-  //3. check in outs
+  //1. Think about load
+  //2. Try 1 impulse
 
   localparam L = (ORD+1)/6; // neeeds check; should be 43
- // localparam N = $ceil(((ORD)/2)/D + 1); // should be 3
+  localparam N = $ceil(((ORD)/2)/D + 1); // should be 3
 
   reg [S-1:0] out_r;
   reg [S-1:0] sum_r;
@@ -58,6 +50,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg clk_fs_d1;
 
   wire [S-1:0] mac_samples[0: N*2 + 1];
+  wire [C-1:0] mac_coeffs[0:N-1];//DELETE!!!!!!
   wire [S-1:0] mac_outs[0:N-1];
 
   clock_divider #(D) i_clk_div( //coeff 52
@@ -86,7 +79,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   always @(posedge clk or negedge nrst) begin
 
     if (!nrst) begin
-     // load <= 0;
+      load <= 0;
       cnt_0 <= 0;
       cnt_1 <= L-1;
       coeff_cnt <= 0;
@@ -94,8 +87,8 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
       mac_c_we <= 0;
       en <= 1;
     end else begin
-      if (c_WE) begin //maybe should use another signal, but i want to test how my system works
-        if (c_WE) begin
+      if (c_WE) begin // shoul be !load
+        if (c_WE) begin //maybe should use another signal, but i want to test how my system works
           mac_c_in <= c_in;
           if (c_addr < L) begin
             mac_c_addr <= c_addr;
@@ -123,13 +116,13 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
     //I'M NOT SURE ABOUT THIS COUNTERS!!!
       // for 1'st sample memory
         if (clk_fs_d1) cnt_0 <= step_cnt;
-        else if (cnt_0 == L-1) cnt_0 <= 0;
-        else cnt_0 <= cnt_0 + 1;
+        else if (cnt_0 == 0) cnt_0 <= L-1;
+        else cnt_0 <= cnt_0 - 1;
 
       // for 2'nd sample memory
-        if (clk_fs_d1) cnt_1 <= (step_cnt == 0) ? L-1 : (step_cnt - 1);
-        else if (cnt_1 == 0) cnt_1 <= L-1;
-        else cnt_1 <= cnt_1 - 1;
+        if (clk_fs_d1) cnt_1 <= (step_cnt == L-1) ? 0 : (step_cnt + 1);
+        else if (cnt_1 == L-1) cnt_1 <= 0;
+        else cnt_1 <= cnt_1 + 1;
 
       // for coeffs memory
         if (clk_fs_d1) coeff_cnt <= 0;

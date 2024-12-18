@@ -63,16 +63,15 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
     mult = ($signed(sum) * $signed(c_out)) >>> 3; //33.30
   end
 
-  always @(posedge i_clk) begin //MAYBE SHOUld USE ANOther sigNAl
+  always @(posedge i_clk) begin
     acc_rst <= WE;
   end
 
-  always @(posedge i_clk) begin //MAYBE SHOUld USE ANOther sigNAl
+  always @(posedge i_clk) begin
     if (acc_rst) begin
       acc <= 0;
     end else begin 
       acc <= $signed(acc) + $signed(mult); //33.30
-     // dout_r <= acc[SAMPLE_SIZE*2 - 1 -: SAMPLE_SIZE];
     end
   end
 
