@@ -2,9 +2,9 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   input  wire clk,
   input  wire rst,
   input  wire WE,
-  input  wire c_WE,
   input  wire en,
 
+  input  wire c_WE,
   input  wire [COEFF_SIZE-1:0] c_in,
   input  wire [$clog2(SIZE)-1:0] c_addr,
 
@@ -44,7 +44,7 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   */
 
   //without rounding
-  assign dout = acc_round[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
+  assign dout = acc[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
   
 
   dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram_0(
