@@ -6,7 +6,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
   input  wire c_WE,
   input  wire [C-1:0] c_in,
-  input  wire [$clog2((ORD+1)/2)-1:0] c_addr
+  input  wire [$clog2((ORD + 1) >> 1)-1:0] c_addr
 );
 
   //L - needed cells in MAC
@@ -16,15 +16,8 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   //S - sample size
   //C - coeff size
 
-
-  //TODO:
-  //1. Optimise
-  //2. Make this readable
-  //3. Remove unused or starnge signals
-  //4. Maybe there will be smth else to do, but I should ask
-
-  localparam N = $ceil(((ORD)/2)/(D-3) + 1); //3 for order 257
-  localparam L = (ORD+1)/(2*N); //43 for order 257
+  localparam L = (ORD+1)/6; // should be 43 
+  localparam N = $ceil(((ORD)/2)/(D - 3) + 1); // should be 3 (-3 for memory new sample writes)
 
   reg [S-1:0] out_r;
   reg [S-1:0] sum_r;
@@ -36,7 +29,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg en_dl_1;
   wire mac_en;
 
-  //reg load;
+  reg load;
 
   reg [$clog2(L)-1:0] cnt_0; 
   reg [$clog2(L)-1:0] cnt_1;
@@ -47,14 +40,12 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg [$clog2(L)-1:0] mac_c_addr;
   reg [C-1:0] mac_c_in;
 
-  wire clk_fs;
-  reg  clk_fs_dl;
-
   wire [S-1:0] mac_samples[0: N*2 + 1];
   wire [S-1:0] mac_outs[0:N-1];
 
-  // Don't know if I need to use some flag to note, that out will be not XXXXX
-  assign dout = out_r;
+  wire clk_fs;
+  reg clk_fs_dl;
+
 
   clock_divider #(D) i_clk_div( //coeff 52
     .in_clk(clk), 
@@ -66,7 +57,8 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
     clk_fs_dl <= clk_fs;
   end
 
-  // counting sum of MAC outs (Q16.15)
+  assign dout = out_r;
+
   integer j;
   always @(*) begin
     sum_r = 0;
@@ -75,85 +67,102 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
     end
   end
 
+  // for 1'st sample memory
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      cnt_0 <= 0;
+    end else if (!c_WE) begin
+      if (clk_fs_dl) cnt_0 <= step_cnt;
+      else if (cnt_0 == 0) cnt_0 <= L-1;
+      else cnt_0 <= cnt_0 - 1;
+    end
+  end
+
+  // for 2'nd sample memory
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      cnt_1 <= L-1;
+    end else if (!c_WE) begin
+      if (clk_fs_dl) cnt_1 <= (step_cnt == L-1) ? 0 : (step_cnt + 1);
+      else if (cnt_1 == L-1) cnt_1 <= 0;
+      else cnt_1 <= cnt_1 + 1;
+    end
+  end
+
+
+  // for coeffs memory
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      coeff_cnt <= 0;
+    end else if (!c_WE) begin
+      if (clk_fs_dl) coeff_cnt <= 0;
+      else if (coeff_cnt == L-1) coeff_cnt <= L-1;
+      else coeff_cnt <= coeff_cnt + 1;
+    end
+  end
+
+   // just to count adresses of sample memories
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      step_cnt <= 0;
+    end else if (!c_WE) begin
+      if (clk_fs_dl) begin
+        if (step_cnt == L-1) step_cnt <= 0;
+        else step_cnt <= step_cnt + 1;
+      end
+    end
+  end
+
   always @(posedge clk or negedge nrst) begin
 
     if (!nrst) begin
-      //load <= 1;s
-      cnt_0 <= 0;
-      cnt_1 <= L-1;
-      coeff_cnt <= 0;
-      step_cnt <= 0;
       mac_c_we <= 0;
       en <= 1;
     end else begin
-      if (c_WE) begin //maybe should use another signal
-          mac_c_in <= c_in;
-          if (c_addr < L) begin
-            mac_c_addr <= c_addr;
-            mac_c_we[0] <= 1;
-            mac_c_we[1] <= 0;
-            mac_c_we[2] <= 0;
-          end else if (c_addr > L*2 - 1) begin
-            mac_c_addr <= (c_addr - L*2);
-            mac_c_we[0] <= 0;
-            mac_c_we[1] <= 0;
-            mac_c_we[2] <= 1;
-          end else begin
-            mac_c_addr <= (c_addr - L);
-            mac_c_we[0] <= 0;
-            mac_c_we[1] <= 1;
-            mac_c_we[2] <= 0;
-          end
+      if (c_WE) begin
 
-        /*end else begin
-          load <= 1;
-         end*/
-       
+        mac_c_in <= c_in;
+        if (c_addr < L) begin
+          mac_c_addr <= c_addr;
+          mac_c_we[0] <= 1;
+          mac_c_we[1] <= 0;
+          mac_c_we[2] <= 0;
+        end else if (c_addr > L*2 - 1) begin
+          mac_c_addr <= (c_addr - L*2);
+          mac_c_we[0] <= 0;
+          mac_c_we[1] <= 0;
+          mac_c_we[2] <= 1;
+        end else begin
+          mac_c_addr <= (c_addr - L);
+          mac_c_we[0] <= 0;
+          mac_c_we[1] <= 1;
+          mac_c_we[2] <= 0;
+        end
+
       end else begin
+
         mac_c_we <= 0;
 
-      // for 1'st sample memory
-        if (clk_fs_dl) cnt_0 <= step_cnt;
-        else if (cnt_0 == 0) cnt_0 <= L-1;
-        else cnt_0 <= cnt_0 - 1;
-
-      // for 2'nd sample memory
-        if (clk_fs_dl) cnt_1 <= (step_cnt == L-1) ? 0 : (step_cnt + 1);
-        else if (cnt_1 == L-1) cnt_1 <= 0;
-        else cnt_1 <= cnt_1 + 1;
-
-      // for coeffs memory
-        if (clk_fs_dl) coeff_cnt <= 0;
-        else if (coeff_cnt == L-1) coeff_cnt <= L-1;
-        else coeff_cnt <= coeff_cnt + 1;
-
-      // just to count adresses of sample memories
-        if (clk_fs_dl) begin
-          if (step_cnt == L-1) step_cnt <= 0;
-          else step_cnt <= step_cnt + 1;
-        end
-    
       // addresses of sample memories
-        if (clk_fs || clk_fs_d1) begin
+        if (clk_fs || clk_fs_dl) begin
           addr_0 <= step_cnt;    
           addr_1 <= step_cnt;
         end else begin
           addr_0 <= cnt_0; 
           addr_1 <= cnt_1;
         end
-    
-        //coeff address
+
+      //coeff address
         mac_c_addr <= coeff_cnt;
 
-	//enable works as ce for MACs not to calc values when not needed
         if (clk_fs || clk_fs_dl) en <= 1'b1;
         else if (coeff_cnt == L-1) en <= 1'b0;
         else en <= 1'b1;
-        
+
         en_dl_0 <= en;
         en_dl_1 <= en_dl_0;
 
-      // write sample rams enable (when getting new sample)
+      // write enable
         if (clk_fs_dl) begin
           mac_s_we <= 1;
         end else begin
@@ -193,7 +202,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
         .mem_out_1(mac_samples[N*2-i+1]),
         .dout(mac_outs[i])
       );
-      
+
     end
   endgenerate
 
