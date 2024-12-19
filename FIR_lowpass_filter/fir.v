@@ -117,7 +117,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
     if (!nrst) begin
       mac_c_we <= 0;
-      en <= 1;
+      en <= 0;
     end else begin
       if (c_WE) begin
 

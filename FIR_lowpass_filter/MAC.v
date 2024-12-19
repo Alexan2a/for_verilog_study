@@ -28,8 +28,10 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   reg [SAMPLE_SIZE+COEFF_SIZE:0] acc;
   reg acc_rst;
   wire [COEFF_SIZE-1:0] c_out;
-  wire i_clk;
+  wire i_clk, c_clk;
+
   assign i_clk = (en) ? clk : 1'b0;
+  assign c_clk = (c_WE) ? clk : i_clk;
   assign dout =  acc[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
 
   dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram_0(
@@ -51,7 +53,7 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   );
 
   single_port_RAM #(COEFF_SIZE, SIZE) coeff_ram(
-    .clk(i_clk),
+    .clk(c_clk),
     .addr(c_addr),
     .din(c_in),
     .WE(c_WE),
