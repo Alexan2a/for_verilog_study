@@ -11,8 +11,11 @@ module tb();
 
   wire[15:0] out;
   reg clk, clk_fs, rst;
-  reg c_we;
+  reg c_we, check_en;
+  reg [7:0] err_cnt;
+  reg [15:0] check;
   integer N;
+  integer M;
 
   localparam D = 52;
   localparam ORD = 257;
@@ -25,6 +28,7 @@ module tb();
     begin: read_block
       $readmemb("in_Data.txt", in_vect);
     end
+
   initial
     begin: file_IO_block
       FILE_1 = $fopen("Data_out.txt", "w");
@@ -37,14 +41,18 @@ module tb();
      rst = 1'b1;
      c_we = 1'b1;
      N = 0;
+     M = 0;
      in = in_vect[0];
+     check_en = 0;
+     err_cnt = 0;
   #5 rst = 1'b0;
   #5 rst = 1'b1;
+  #135470 check_en = 1;
   end
 
 
   always #5 clk = ~clk;
-  always #521 clk_fs = !clk_fs;
+  always #520 clk_fs = !clk_fs;
 
   //coeff load
   reg [7:0] cnt = 0;
@@ -81,5 +89,21 @@ module tb();
     .c_in(coeffs_array_0[cnt]),
     .c_addr(cnt)
   );
+
+  always @(clk_fs) begin
+    if (check_en) begin
+      check = $signed(coeffs_array_0[M]) >>> 3;
+      if (out != check) begin
+	      err_cnt = err_cnt + 1;
+        $error("out: expected = %h, real = %h",check, out);
+      end
+      M = M + 1;
+    end
+  end
+
+  initial begin
+    #1000900 $display("Output errors: %d", err_cnt);
+    $stop();
+  end
 
 endmodule

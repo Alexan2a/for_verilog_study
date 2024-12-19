@@ -30,9 +30,22 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   wire [COEFF_SIZE-1:0] c_out;
   wire i_clk, c_clk;
 
+
   assign i_clk = (en) ? clk : 1'b0;
   assign c_clk = (c_WE) ? clk : i_clk;
-  assign dout =  acc[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
+
+  // to round (to make it this way was the first thougth, I needed to test)
+  /*
+  localparam A = 2 ** (SAMPLE_SIZE - 2); 
+  wire [SAMPLE_SIZE+COEFF_SIZE:0] acc_round;
+
+  assign dout = acc_round[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
+  assign acc_round = acc + A;
+  */
+
+  //without rounding
+  assign dout = acc_round[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
+  
 
   dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram_0(
     .clk(i_clk),
