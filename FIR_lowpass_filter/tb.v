@@ -61,8 +61,10 @@ module tb();
 
   //pick next sample
   always @(clk_fs) begin
-    N = N + 1;
-    in = in_vect[N];
+    if (!c_we) begin
+      N = N + 1;
+      in = in_vect[N];
+    end
   end
 
   always @(clk_fs)
