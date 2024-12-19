@@ -21,16 +21,16 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
   reg [S-1:0] out_r;
   reg [S-1:0] sum_r;
+
   reg         mac_s_we;
   reg [N-1:0] mac_c_we;
+  reg [C-1:0] mac_c_in;
 
-  reg en;
-  reg en_dl_0;
-  reg en_dl_1;
+  reg  en;
+  reg  en_dl_0;
+  reg  en_dl_1;
   wire mac_en;
-
-  reg load;
-
+  
   reg [$clog2(L)-1:0] cnt_0; 
   reg [$clog2(L)-1:0] cnt_1;
   reg [$clog2(L)-1:0] coeff_cnt; 
@@ -38,7 +38,6 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
   reg [$clog2(L)-1:0] addr_0;
   reg [$clog2(L)-1:0] addr_1;
   reg [$clog2(L)-1:0] mac_c_addr;
-  reg [C-1:0] mac_c_in;
 
   wire [S-1:0] mac_samples[0: N*2 + 1];
   wire [S-1:0] mac_outs[0:N-1];
@@ -59,6 +58,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
 
   assign dout = out_r;
 
+  //counts sum of MAC outputs format Q16.15
   integer j;
   always @(*) begin
     sum_r = 0;
@@ -188,7 +188,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter S = 16, parameter C
         .clk(clk),
         .rst(nrst),
         .WE(mac_s_we),
-        .c_in(mac_c_in), //just to test!
+        .c_in(mac_c_in),
         .c_addr(mac_c_addr),
         .c_WE(mac_c_we[i]),
         .en(mac_en),
