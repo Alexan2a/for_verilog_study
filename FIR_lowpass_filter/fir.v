@@ -1,7 +1,6 @@
 module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
   input  wire nrst,
   input  wire clk,
-  
   input  wire [SAMPLE_SIZE-1:0] din,
   output wire [SAMPLE_SIZE-1:0] dout,
 
@@ -19,12 +18,13 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   localparam MAC_NUM = $ceil(((ORD)/2)/(D - 3) + 1); // should be 3 (-3 for memory new sample writes)
   localparam RND = 2**(SAMPLE_SIZE-1);
 
-  localparam N = 2; // !!!READ THIS PLEASE this is for sum rounding, if it is 5, number of mistakes is 0
+  localparam N = 5; // !!!READ THIS PLEASE this is for sum rounding, if it is 5, number of mistakes is 0
 
   reg [SAMPLE_SIZE-1:0]          out_r;
   reg [SAMPLE_SIZE+COEFF_SIZE:0] sum_r;
-  reg [SAMPLE_SIZE+COEFF_SIZE-1 : COEFF_SIZE-N]          sum_round;
-  reg [1:0] check_sum;
+
+  wire [SAMPLE_SIZE+COEFF_SIZE-1 : COEFF_SIZE-N] sum_round;
+  wire [1:0] check_sum;
 
   reg                  mac_s_we;
   reg [MAC_NUM-1:0]    mac_c_we;
@@ -68,9 +68,10 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
     for(j = 0; j < MAC_NUM; j = j + 1) begin
       sum_r = $signed(sum_r) + $signed(mac_outs[j]);  //33.30
     end
-    sum_round = sum_r[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+N] + 1; //18.16
-    check_sum = sum_round[SAMPLE_SIZE+COEFF_SIZE-1 -: 2];
   end
+
+  assign sum_round = sum_r[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+N] + 1; //18.16
+  assign check_sum = sum_round[SAMPLE_SIZE+COEFF_SIZE-1 -: 2];
 
   // for 1'st sample memory
   always @(posedge clk or negedge nrst) begin
