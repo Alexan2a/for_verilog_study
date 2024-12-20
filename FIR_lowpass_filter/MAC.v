@@ -1,10 +1,11 @@
-module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SIZE = 16, parameter DISC = 52)(
+module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
   input  wire clk,
   input  wire rst,
-  input  wire WE,
   input  wire en,
 
   input  wire c_WE,
+  input  wire WE,
+  
   input  wire [COEFF_SIZE-1:0] c_in,
   input  wire [$clog2(SIZE)-1:0] c_addr,
 
@@ -19,7 +20,7 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   output wire [SAMPLE_SIZE-1:0] mem_out_0,
   output wire [SAMPLE_SIZE-1:0] mem_out_1,
 
-  output wire [SAMPLE_SIZE-1:0] dout
+  output wire [SAMPLE_SIZE+COEFF_SIZE:0] dout
 );
 
   reg [SAMPLE_SIZE-1:0] dout_r;
@@ -30,23 +31,11 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
   wire [COEFF_SIZE-1:0] c_out;
   wire i_clk, c_clk;
 
-
   assign i_clk = (en) ? clk : 1'b0;
   assign c_clk = (c_WE) ? clk : i_clk;
 
-  // to round (to make it this way was the first thougth, I needed to test)
-  /*
-  localparam A = 2 ** (SAMPLE_SIZE - 2); 
-  wire [SAMPLE_SIZE+COEFF_SIZE:0] acc_round;
-
-  assign dout = acc_round[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
-  assign acc_round = acc + A;
-  */
-
-  //without rounding
-  assign dout = acc[SAMPLE_SIZE*2 - 2 -: SAMPLE_SIZE]; 
+  assign dout = acc; 
   
-
   dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram_0(
     .clk(i_clk),
     .wr_addr(wr_addr_0),
@@ -89,6 +78,5 @@ module MAC #(parameter SIZE = 43, parameter COEFF_SIZE = 16, parameter SAMPLE_SI
       acc <= $signed(acc) + $signed(mult); //33.30
     end
   end
-
 
 endmodule
