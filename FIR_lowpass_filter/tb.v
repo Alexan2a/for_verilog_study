@@ -92,9 +92,9 @@ module tb();
 
   always @(clk_fs) begin
     if (check_en) begin
-      check = $signed(coeffs_array_0[M]) >>> 3;
+      check = (($signed(-coeffs_array_0[M]) >>> 2) + 1) >>> 1;
       if (out != check) begin
-	      err_cnt = err_cnt + 1;
+	err_cnt = err_cnt + 1;
         $error("out: expected = %h, real = %h",check, out);
       end
       M = M + 1;
