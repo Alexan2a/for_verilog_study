@@ -18,12 +18,12 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   localparam MAC_NUM = $ceil(((ORD)/2)/(D - 3) + 1); // should be 3 (-3 for memory new sample writes)
   localparam RND = 2**(SAMPLE_SIZE-1);
 
-  localparam N = 5; // !!!READ THIS PLEASE this is for sum rounding, if it is 5, number of mistakes is 0
+  localparam N = 3;
 
   reg [SAMPLE_SIZE-1:0]          out_r;
   reg [SAMPLE_SIZE+COEFF_SIZE:0] sum_r;
 
-  wire [SAMPLE_SIZE+COEFF_SIZE-1 : COEFF_SIZE-N] sum_round;
+  wire [SAMPLE_SIZE+N-1 : 0] sum_round;
   wire [1:0] check_sum;
 
   reg                  mac_s_we;
@@ -70,8 +70,41 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
     end
   end
 
-  assign sum_round = sum_r[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+N] + 1; //18.16
-  assign check_sum = sum_round[SAMPLE_SIZE+COEFF_SIZE-1 -: 2];
+  /////////////////////////////////////////////////////////////////////////
+  //                                                                     //
+  //     ROUND:                                                          //
+  //                                                                     //
+  //     N = 3:                                                          //
+  //                                                                     //
+  //     sum_round is [32,31,30 . 29,28,...,15,(14)],    Q19.16          //
+  //                                            +1                       //
+  //              !!!: 14's will be deleted                              //
+  //                                                                     //
+  //     check_sum is [(32),(31),30] from sum_r                          //       
+  //                  [(18),(17),16] from sum_round                      //
+  //                                                                     //
+  //              !!!: 32'nd, 31'st (18's, 17's) will be deleted         //
+  //                                                                     //
+  //     out is       [30 . 29,28,...,16,15]             Q16.15          //
+  //                                                                     //        
+  //                                                                     //                                                            
+  //     N = 2: It is incorrect, but causes less mistakes                //
+  //                                                                     //
+  //     sum_round is [32,31,30 . 29,28,...,15],         Q18.16          //
+  //                                        +1                           //
+  //                                                                     //
+  //                                                                     //
+  //     check_sum is [(32),(31),30] from sum_r                          //       
+  //                  [(18),(17),16] from sum_round                      //
+  //                                                                     //
+  //              !!!: 32'nd, 31'st (18's, 17's) will be deleted         //
+  //                                                                     //
+  //     out is       [30 . 29,28,...,16,15]             Q16.15          //
+  //                                                                     //  
+  /////////////////////////////////////////////////////////////////////////
+
+  assign sum_round = sum_r[SAMPLE_SIZE+COEFF_SIZE -: SAMPLE_SIZE+N]+1; //19.16
+  assign check_sum = sum_round[SAMPLE_SIZE+N-1 -: 3]; 
 
   // for 1'st sample memory
   always @(posedge clk or negedge nrst) begin
@@ -94,7 +127,6 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
       else cnt_1 <= cnt_1 + 1;
     end
   end
-
 
   // for coeffs memory
   always @(posedge clk or negedge nrst) begin
@@ -176,9 +208,9 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
         end
 
         if (clk_fs) begin
-          out_r <= (check_sum == 2'b01) ? RND :
-                   (check_sum == 2'b10) ? RND-1 :
-                    sum_round[SAMPLE_SIZE+COEFF_SIZE-2 -: SAMPLE_SIZE];
+          out_r <= (check_sum == 3'b001 || check_sum == 3'b010) ? RND-1 :
+                   (check_sum == 3'b110 || check_sum == 3'b101) ? RND :
+                    sum_round[SAMPLE_SIZE+N-3 -: SAMPLE_SIZE];
         end
       end
     end
