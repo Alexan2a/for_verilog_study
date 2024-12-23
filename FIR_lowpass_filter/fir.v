@@ -14,8 +14,8 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   //D - number of periods og working rate in period fs
   //ORD - order of filter
   
-  localparam MAC_SIZE = (ORD+1)/6; // should be 43 
-  localparam MAC_NUM = $ceil(((ORD)/2)/(D - 3) + 1); // should be 3 (-3 for memory new sample writes)
+  localparam MAC_SIZE = (ORD+1)/6;
+  localparam MAC_NUM = (((ORD/2) + (D-3))/(D - 3));
   localparam RND = 2**(SAMPLE_SIZE-1);
 
   reg [SAMPLE_SIZE-1:0]          out_r;
@@ -47,7 +47,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   wire clk_fs;
   reg  clk_fs_dl;
 
-  clock_divider #(D) i_clk_div( //coeff 52
+  clock_divider #(D) i_clk_div(
     .in_clk(clk), 
     .rst(nrst),
     .out_clk(clk_fs)
@@ -132,37 +132,28 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
       end
     end
   end
+  
+  always @(posedge clk) begin
+    if (clk_fs) begin
+      if (!c_WE) begin
+        out_r <= (check_sum == 3'b001 || check_sum == 3'b010) ? RND-1 :
+                 (check_sum == 3'b110 || check_sum == 3'b101) ? RND :
+                  sum_round[SAMPLE_SIZE : 1];
+      end
+    end
+  end
 
   always @(posedge clk or negedge nrst) begin
-
     if (!nrst) begin
-      mac_c_we <= 0;
       en <= 0;
+      mac_addr_0 <= 0;
+      mac_addr_1 <= MAC_SIZE-1;
+      en_dl_0 <= 0;
+      en_dl_1 <= 0;
+      mac_s_we <= 0;
     end else begin
-      if (c_WE) begin
-
-        mac_c_in <= c_in;
-        if (c_addr < MAC_SIZE) begin
-          mac_c_addr <= c_addr;
-          mac_c_we[0] <= 1;
-          mac_c_we[1] <= 0;
-          mac_c_we[2] <= 0;
-        end else if (c_addr > MAC_SIZE*2 - 1) begin
-          mac_c_addr <= (c_addr - MAC_SIZE*2);
-          mac_c_we[0] <= 0;
-          mac_c_we[1] <= 0;
-          mac_c_we[2] <= 1;
-        end else begin
-          mac_c_addr <= (c_addr - MAC_SIZE);
-          mac_c_we[0] <= 0;
-          mac_c_we[1] <= 1;
-          mac_c_we[2] <= 0;
-        end
-
-      end else begin
-
-        mac_c_we <= 0;
-
+      if (!c_WE) begin
+      
       // addresses of sample memories
         if (clk_fs || clk_fs_dl) begin
           mac_addr_0 <= step_cnt;    
@@ -171,9 +162,6 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
           mac_addr_0 <= cnt_0; 
           mac_addr_1 <= cnt_1;
         end
-
-      //coeff address
-        mac_c_addr <= coeff_cnt;
 
         if (clk_fs || clk_fs_dl) en <= 1'b1;
         else if (coeff_cnt == MAC_SIZE-1) en <= 1'b0;
@@ -188,13 +176,36 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
         end else begin
           mac_s_we <= 0;
         end
-
-        if (clk_fs) begin
-          out_r <= (check_sum == 3'b001 || check_sum == 3'b010) ? RND-1 :
-                   (check_sum == 3'b110 || check_sum == 3'b101) ? RND :
-                    sum_round[SAMPLE_SIZE : 1];
-        end
       end
+    end
+  end
+  
+  always @(posedge clk) begin
+    if (c_WE) begin
+
+      mac_c_in <= c_in;
+      if (c_addr < MAC_SIZE) begin
+        mac_c_addr <= c_addr;
+        mac_c_we[0] <= 1;
+        mac_c_we[1] <= 0;
+        mac_c_we[2] <= 0;
+      end else if (c_addr > MAC_SIZE*2 - 1) begin
+        mac_c_addr <= (c_addr - MAC_SIZE*2);
+        mac_c_we[0] <= 0;
+        mac_c_we[1] <= 0;
+        mac_c_we[2] <= 1;
+      end else begin
+        mac_c_addr <= (c_addr - MAC_SIZE);
+        mac_c_we[0] <= 0;
+        mac_c_we[1] <= 1;
+        mac_c_we[2] <= 0;
+      end
+
+    end else begin
+
+      mac_c_we <= 0;
+      mac_c_addr <= coeff_cnt;
+
     end
   end
 
@@ -208,7 +219,6 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
 
       MAC #(MAC_SIZE, SAMPLE_SIZE, COEFF_SIZE) i_MAC(
         .clk(clk),
-        .rst(nrst),
         .WE(mac_s_we),
         .c_in(mac_c_in),
         .c_addr(mac_c_addr),

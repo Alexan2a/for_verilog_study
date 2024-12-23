@@ -1,6 +1,5 @@
 module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
   input  wire clk,
-  input  wire rst,
   input  wire en,
 
   input  wire c_WE,
