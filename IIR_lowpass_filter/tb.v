@@ -3,13 +3,13 @@
 
 module tb();
 
-  reg [24:0] in_vect[0:5000], in;
-  wire [16:0] coeffs_array [0:14];
+  reg  [15:0] in_vect[0:5000], in;
+  wire [15:0] coeffs_array [0:19];
 
 // Execute macro
   `COEFFS_ARRAY
 
-  wire[24:0] out;
+  wire[23:0] out;
   wire[31:0] out_f;
   reg clk, clk_fs, rst;
   reg c_we;
@@ -34,7 +34,7 @@ module tb();
     for (i = 0; i < 5000; i=i+1) begin
       in_vect[i] = 0;
       if (i == 2) begin
-        in_vect[i][22] = 1;
+        in_vect[i][15] = 1;
       end
     end
   end
@@ -56,12 +56,12 @@ module tb();
   always #520 clk_fs = !clk_fs;
 
   //coeff load
-  reg [3:0] cnt = 0;
+  reg [4:0] cnt = 0;
   always @(posedge clk or negedge rst) begin
     if (!rst) begin
       cnt <= 0;
-    end else if (cnt == 15) begin //128
-      cnt <= 15;
+    end else if (cnt == 19) begin //128
+      cnt <= 19;
       c_we <= 1'b0;
     end else begin
       cnt <= cnt+1;
@@ -76,7 +76,7 @@ module tb();
     end
   end
 
-  assign out_f = {{7{out[24]}}, out};
+  assign out_f = {{8{out[23]}}, out};
   always @(clk_fs)
     begin: write_block
       $fdisplay(FILE_1, "0b%bs32", out_f);
@@ -92,6 +92,6 @@ module tb();
 
     .din(in),
     .dout(out)
-);
+  );
 
 endmodule

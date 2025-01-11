@@ -1,15 +1,23 @@
-module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_FR = 15, K_WH = 1, K_FR = 16, D = 52) (
-  input clk,
-  input nrst,
+module iir #(
+  parameter ORD = 10, 
+  parameter SAMP_WH = 4,
+  parameter SAMP_FR = 23,
+  parameter COEFF_WH = 2,
+  parameter COEFF_FR = 14,
+  parameter K_WH = 1,
+  parameter K_FR = 15,
+  parameter D = 52
+) (
+  input  wire clk,
+  input  wire nrst,
 
-  input c_we,
-  input [COEFF_WH+COEFF_FR-1:0] c_in,
-  input  [$clog2(ORD/2*3)-1:0] c_addr,
+  input  wire c_we,
+  input  wire [COEFF_WH+COEFF_FR-1:0] c_in,
+  input  wire [$clog2(ORD*2)-1:0] c_addr,
 
-  input  [SAMP_WH+SAMP_FR-1:0] din,
-  output [SAMP_WH+SAMP_FR-1:0] dout
+  input  wire [15:0] din,
+  output wire [SAMP_FR:0] dout
 );
-
 
   wire clk_fs; 
 
@@ -21,30 +29,24 @@ module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_
 
   localparam SOS_NUM = ORD / 2;
 
-////////////////////////////
-//  FOR TESTING
-
-  wire [K_WH+K_FR-1:0] K [0:SOS_NUM-1];
-  assign K[0] = 17'h0A192;
-  assign K[1] = 17'h06007;
-  assign K[2] = 17'h01C98;
-  assign K[3] = 17'h001EB;
-  assign K[4] = 17'h0C499;
-  
-
-////////////////////////////
+  reg [K_WH+K_FR-1:0] K [0:SOS_NUM-1];
 
   reg cnt;
   reg [4:0] sos_cnt;
   
-  wire [SAMP_WH+SAMP_FR-1:0] sos_samples[0:SOS_NUM];
+  wire [SAMP_WH+SAMP_FR-1:0] sos_outs[0:SOS_NUM];
   reg  [SOS_NUM-1:0] sos_ce;
   reg  [SOS_NUM-1:0] sos_c_we;
   reg  [1:0] sos_c_addr;
 
-  assign sos_samples[0] = {{2{din[15]}}, din};
-  assign dout = sos_samples[SOS_NUM][SAMP_WH+SAMP_FR-1:0];
+  assign sos_outs[0] = {{(SAMP_WH+SAMP_FR-16){din[15]}}, din} << (SAMP_FR-15);
 
+  localparam OVF = 2 ** SAMP_FR;
+  assign dout = (sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-1] == 1 && ~&sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-2 -: SAMP_WH-1]) ? OVF   :
+                (sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-1] == 0 &&  |sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-2 -: SAMP_WH-1]) ? OVF-1 :
+                 sos_outs[SOS_NUM][SAMP_FR:0];
+
+  //as clk but restarts on clk_fs
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       cnt <= 1'b0;
@@ -54,6 +56,7 @@ module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_
     end
   end
 
+  //counts to SOS_NUM, restarts on clk_fs
   always @(negedge clk or negedge nrst) begin
     if (!nrst) begin
       sos_cnt <= 1'b0;
@@ -63,13 +66,16 @@ module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_
       else if (cnt == 1) sos_cnt = sos_cnt + 1;
     end
   end
-
+  
+  //enable SOS number == sos_cnt
   always @(*) begin //or maybe "for" cycle
     if (c_we) sos_ce = 0;
     else sos_ce = 1 << sos_cnt;
   end
 
   integer j;
+
+  //write enable sos number == sos_cnt, c_addr decoder for sos coeffs
   always @(*) begin
     if (c_addr >= SOS_NUM*3) begin
       sos_c_we = 0;
@@ -84,12 +90,21 @@ module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_
     end
   end
 
+  //c_addr decoder for K coeffs
+  always @(posedge clk or negedge nrst) begin
+    if (c_we) begin
+      for (j = 0; j < SOS_NUM; j = j+1) begin
+        if (c_addr == SOS_NUM*3+j) K[j] = c_in;
+      end
+    end
+  end
+
   reg [SAMP_WH+SAMP_FR+K_WH+K_FR-1:0] K_prods [0:SOS_NUM-1];
   reg [SAMP_WH+SAMP_FR-1:0] sos_ins [0:SOS_NUM-1];
 
-  always @(*) begin
+  always @(*) begin //overflow check needed
     for (j = 0; j < SOS_NUM; j = j+1) begin
-      K_prods[j] = $signed(K[j])*$signed(sos_samples[j]);
+      K_prods[j] = $signed(K[j])*$signed(sos_outs[j]);
       sos_ins[j] = (K_prods[j][SAMP_WH+SAMP_FR+K_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
     end
   end
@@ -105,8 +120,8 @@ module iir #(parameter ORD = 10, SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_
         .c_we(sos_c_we[i]),
         .c_in(c_in),
         .c_addr(sos_c_addr),
-        .din(sos_ins[i]), //round
-        .dout(sos_samples[i+1])
+        .din(sos_ins[i]),
+        .dout(sos_outs[i+1])
       );
     end
   endgenerate

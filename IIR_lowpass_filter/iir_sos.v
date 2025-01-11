@@ -1,4 +1,11 @@
-module iir_sos #(parameter SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_FR = 15, REC_WH = 7, REC_FR = 24) (
+module iir_sos #(
+  parameter SAMP_WH = 4,
+  parameter SAMP_FR = 23,
+  parameter COEFF_WH = 2,
+  parameter COEFF_FR = 14,
+  parameter REC_WH = 7,
+  parameter REC_FR = 24
+) (
   input  wire nrst,
   input  wire clk,
   input  wire ce,
@@ -33,10 +40,15 @@ module iir_sos #(parameter SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_FR = 1
 
   wire [COEFF_WH+COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
   wire [COEFF_WH+COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
+
+  wire [REC_WH+REC_FR:0] a_prod_conv;
+  wire [REC_WH+REC_FR:0] b_prod_conv;
   reg  [REC_WH+REC_FR-1:0] acc;
 
   wire [REC_WH+REC_FR-1:0]   out;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
+
+  localparam OVF = 2**(REC_WH+REC_FR);
 
   assign dout = out_r;
 
@@ -47,8 +59,12 @@ module iir_sos #(parameter SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_FR = 1
   assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff)+$signed(sel_a_lsb);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-  assign sum_a = $signed({{(REC_WH+REC_FR-(SAMP_WH+SAMP_FR)){din[SAMP_WH+SAMP_FR-1]}}, din} << (REC_FR-SAMP_FR))+$signed(acc);
-  assign out = $signed(sum_a)+$signed(b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR])+$signed(sum_a_del_1);
+  assign b_prod_conv = (b_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b01) ? OVF-1 :
+                       (b_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b10) ? OVF :
+                       (b_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
+
+  assign sum_a = $signed({{(REC_FR-SAMP_FR){din[SAMP_WH+SAMP_FR-1]}}, din} << (REC_FR-SAMP_FR))+$signed(acc);
+  assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
 
   always @(posedge c_clk) begin
     if (c_we) begin
@@ -72,12 +88,16 @@ module iir_sos #(parameter SAMP_WH = 3, SAMP_FR = 22, COEFF_WH = 2, COEFF_FR = 1
     end
   end
 
+  assign a_prod_conv = (a_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b01) ? OVF-1 :
+                       (a_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b10) ? OVF :
+                       (a_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
+
   assign acc_rst = nrst && ce;
   always @(posedge i_clk or negedge acc_rst) begin
     if (!acc_rst) begin
       acc <= 0;
     end else begin
-      acc <= $signed(acc) + $signed((a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1); //round
+      acc <= $signed(acc) + $signed(a_prod_conv); //round
     end
   end
 
