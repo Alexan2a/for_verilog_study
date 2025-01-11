@@ -105,7 +105,9 @@ module iir #(
   always @(*) begin //overflow check needed
     for (j = 0; j < SOS_NUM; j = j+1) begin
       K_prods[j] = $signed(K[j])*$signed(sos_outs[j]);
-      sos_ins[j] = (K_prods[j][SAMP_WH+SAMP_FR+K_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
+      sos_ins[j] = (K_prods[j][SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: 2] == 2'b10) ? 2**(SAMP_WH+SAMP_FR-1)   :
+                   (K_prods[j][SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: 2] == 2'b01) ? 2**(SAMP_WH+SAMP_FR-1)-1 :
+                   (K_prods[j][SAMP_WH+SAMP_FR+K_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
     end
   end
 
