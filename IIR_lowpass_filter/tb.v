@@ -18,6 +18,7 @@ module tb();
 
   integer FILE_1;
 
+  //upload input
   /*initial
     begin: read_block
       $readmemb("Data_in.txt", in_vect);
@@ -34,7 +35,8 @@ module tb();
     for (i = 0; i < 5000; i=i+1) begin
       in_vect[i] = 0;
       if (i == 2) begin
-        in_vect[i][15] = 1;
+        in_vect[i][15] = 1;   //for -1
+      //in_vect[i] = 2**15-1; //for 1
       end
     end
   end
