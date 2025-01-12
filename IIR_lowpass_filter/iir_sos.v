@@ -38,8 +38,8 @@ module iir_sos #(
   reg  [REC_WH+REC_FR-1:0] sum_a_del_1;
   wire [REC_WH+REC_FR-1:0] sel_sum_a_del;
 
-  wire [COEFF_WH+COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
-  wire [COEFF_WH+COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
+  wire [COEFF_FR+REC_WH+REC_FR:0] a_prod;
+  wire [COEFF_FR+REC_WH+REC_FR:0] b_prod;
 
   wire [REC_WH+REC_FR:0] a_prod_conv;
   wire [REC_WH+REC_FR:0] b_prod_conv;
@@ -59,9 +59,8 @@ module iir_sos #(
   assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff)+$signed(sel_a_lsb);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-  assign b_prod_conv = (b_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b01) ? OVF-1 :
-                       (b_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b10) ? OVF :
-                       (b_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
+  assign a_prod_conv = (a_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
+  assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
 
   assign sum_a = $signed({{(REC_FR-SAMP_FR){din[SAMP_WH+SAMP_FR-1]}}, din} << (REC_FR-SAMP_FR))+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
@@ -88,16 +87,12 @@ module iir_sos #(
     end
   end
 
-  assign a_prod_conv = (a_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b01) ? OVF-1 :
-                       (a_prod[COEFF_WH+COEFF_FR+REC_WH+REC_FR-1 -: 2] == 2'b10) ? OVF :
-                       (a_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
-
   assign acc_rst = nrst && ce;
   always @(posedge i_clk or negedge acc_rst) begin
     if (!acc_rst) begin
       acc <= 0;
     end else begin
-      acc <= $signed(acc) + $signed(a_prod_conv); //round
+      acc <= $signed(acc) + $signed(a_prod_conv);
     end
   end
 
@@ -112,7 +107,7 @@ module iir_sos #(
   end
 
   always @(negedge ce) begin
-    out_r <= (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1; //round
+    out_r <= (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
   end
 
 endmodule
