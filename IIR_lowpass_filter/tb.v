@@ -20,7 +20,7 @@ module tb();
 
   /*initial
     begin: read_block
-      $readmemb("in_Data.txt", in_vect);
+      $readmemb("Data_in.txt", in_vect);
     end*/
 
   initial
