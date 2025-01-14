@@ -4,6 +4,8 @@ module iir #(
   parameter SAMP_FR = 23,
   parameter COEFF_WH = 2,
   parameter COEFF_FR = 14,
+  parameter REC_WH = 8,
+  parameter REC_FR = 24,
   parameter K_WH = 1,
   parameter K_FR = 15,
   parameter D = 52
@@ -77,12 +79,11 @@ module iir #(
 
   //write enable sos number == sos_cnt, c_addr decoder for sos coeffs
   always @(*) begin
-    if (c_addr >= SOS_NUM*3) begin
-      sos_c_we = 0;
-    end else begin
+    sos_c_we = 0;
+    sos_c_addr = 0;
+    if (c_addr < SOS_NUM*3) begin
       for (j = 0; j < SOS_NUM*3; j = j+3) begin
         if (c_addr >= j && c_addr < j+3) begin
-          sos_c_we = 0;
           sos_c_we[j/3] = 1;
           sos_c_addr = c_addr - j;
         end
@@ -91,7 +92,7 @@ module iir #(
   end
 
   //c_addr decoder for K coeffs
-  always @(posedge clk or negedge nrst) begin
+  always @(posedge clk) begin
     if (c_we) begin
       for (j = 0; j < SOS_NUM; j = j+1) begin
         if (c_addr == SOS_NUM*3+j) K[j] = c_in;
@@ -101,6 +102,7 @@ module iir #(
 
   reg [SAMP_WH+SAMP_FR+K_WH+K_FR-1:0] K_prods [0:SOS_NUM-1];
   reg [SAMP_WH+SAMP_FR-1:0] sos_ins [0:SOS_NUM-1];
+  
 
   always @(*) begin //overflow check needed
     for (j = 0; j < SOS_NUM; j = j+1) begin
@@ -114,7 +116,7 @@ module iir #(
   genvar i;
   generate
     for(i = 0; i < SOS_NUM; i = i + 1) begin
-      iir_sos i_iir_sos(
+      iir_sos #(SAMP_WH, SAMP_FR, COEFF_WH, COEFF_FR, REC_WH, REC_FR) i_iir_sos(
         .nrst(nrst),
         .clk(clk),
         .ce(sos_ce[i]),
