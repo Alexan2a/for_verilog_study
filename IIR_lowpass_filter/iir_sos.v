@@ -3,7 +3,7 @@ module iir_sos #(
   parameter SAMP_FR = 23,
   parameter COEFF_WH = 2,
   parameter COEFF_FR = 14,
-  parameter REC_WH = 7,
+  parameter REC_WH = 8,
   parameter REC_FR = 24
 ) (
   input  wire nrst,
@@ -38,17 +38,17 @@ module iir_sos #(
   reg  [REC_WH+REC_FR-1:0] sum_a_del_1;
   wire [REC_WH+REC_FR-1:0] sel_sum_a_del;
 
-  wire [COEFF_FR+REC_WH+REC_FR:0] a_prod;
-  wire [COEFF_FR+REC_WH+REC_FR:0] b_prod;
+  wire [COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
+  wire [COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
 
-  wire [REC_WH+REC_FR:0] a_prod_conv;
-  wire [REC_WH+REC_FR:0] b_prod_conv;
+  wire [REC_WH+REC_FR-1:0] a_prod_conv;
+  wire [REC_WH+REC_FR-1:0] b_prod_conv;
   reg  [REC_WH+REC_FR-1:0] acc;
 
   wire [REC_WH+REC_FR-1:0]   out;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
 
-  localparam OVF = 2**(REC_WH+REC_FR);
+  localparam OVF = 2**(REC_WH+REC_FR-1);
 
   assign dout = out_r;
 
@@ -59,8 +59,8 @@ module iir_sos #(
   assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff)+$signed(sel_a_lsb);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-  assign a_prod_conv = (a_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
-  assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR -: REC_WH+REC_FR+2]+1)>>>1;
+  assign a_prod_conv = (a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
+  assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
 
   assign sum_a = $signed({{(REC_FR-SAMP_FR){din[SAMP_WH+SAMP_FR-1]}}, din} << (REC_FR-SAMP_FR))+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
@@ -107,7 +107,9 @@ module iir_sos #(
   end
 
   always @(negedge ce) begin
-    out_r <= (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
+    out_r <= (out[REC_WH+REC_FR-1] == 1 && ~&out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)   :
+             (out[REC_WH+REC_FR-1] == 0 &&  |out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)-1 :
+             (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
   end
 
 endmodule
