@@ -47,9 +47,8 @@ module iir_sos #(
 
   wire [REC_WH+REC_FR-1:0]   out;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
-
-  localparam OVF = 2**(REC_WH+REC_FR-1);
-
+  wire acc_rst;
+  
   assign dout = out_r;
 
   assign sel_sum_a_del = (mult_sel) ? sum_a_del_1 : sum_a_del_0;
