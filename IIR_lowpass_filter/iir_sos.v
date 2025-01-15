@@ -3,6 +3,8 @@ module iir_sos #(
   parameter SAMP_FR = 23,
   parameter COEFF_WH = 2,
   parameter COEFF_FR = 14,
+  parameter K_WH = 1,
+  parameter K_FR = 15,
   parameter REC_WH = 8,
   parameter REC_FR = 24
 ) (
@@ -20,24 +22,24 @@ module iir_sos #(
   output wire [SAMP_WH+SAMP_FR-1:0] dout
 );
 
-  wire c_clk;
   reg ce_del;
   
   always @(posedge clk) begin
     ce_del <= ce;
   end
-
-  wire ce_end;
-
-  assign ce_end = !(ce || !ce_del);
   
-  assign c_clk = (c_we) ? clk : 1'b0;
+  wire ce_end;
+  
+  assign ce_end = !(ce || !ce_del);
+
+  reg [SAMP_WH+SAMP_FR-1:0]din_r;
 
   reg  [COEFF_FR-1:0] a_lsb [0:1];
   wire [COEFF_FR-1:0] sel_a_lsb;
   
   reg  [COEFF_WH+COEFF_FR-1:0] a_coeff [0:1];
   reg  [COEFF_WH+COEFF_FR-1:0] b_coeff;
+  reg  [COEFF_WH+COEFF_FR-1:0] K_coeff;
   wire [COEFF_WH+COEFF_FR-1:0] sel_coeff;  
 
   wire [REC_WH+REC_FR-1:0] sum_a;
@@ -55,8 +57,20 @@ module iir_sos #(
 
   wire [REC_WH+REC_FR-1:0]   out;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
+
+  wire [SAMP_WH+SAMP_FR+K_WH+K_FR-1:0] K_prod;
+  wire [SAMP_WH+SAMP_FR-1:0] K_din;
   
   assign dout = out_r;
+
+  
+  always @(posedge clk) begin
+    din_r <= din;
+  end
+  
+
+  assign K_prod = $signed(K_coeff)*$signed(din);
+  assign K_din = ({{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}},K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1)>>>1;
 
   assign sel_sum_a_del = (mult_sel) ? sum_a_del_1 : sum_a_del_0;
   assign sel_coeff     = (mult_sel) ? a_coeff[1] : a_coeff[0];
@@ -67,18 +81,18 @@ module iir_sos #(
 
   assign a_prod_conv = (a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
   assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
-  assign din_conv = {{(REC_FR-SAMP_FR){din[SAMP_WH+SAMP_FR-1]}}, din} << (REC_FR-SAMP_FR);
-  
-  assign sum_a = $signed(din_conv)+$signed(acc);
+
+  assign sum_a = $signed(K_din)+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
 
 
-  always @(posedge c_clk) begin
+  always @(posedge clk) begin
     if (c_we) begin
       case(c_addr)
          2'b00: a_coeff[0] <= c_in;
          2'b01: a_coeff[1] <= c_in;
          2'b10: b_coeff    <= c_in;
+         2'b11: K_coeff    <= c_in;
          default: begin
          end
       endcase
