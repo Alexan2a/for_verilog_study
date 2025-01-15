@@ -33,11 +33,12 @@ module iir #(
 
   reg [K_WH+K_FR-1:0] K [0:SOS_NUM-1];
 
-  reg cnt;
-  reg [4:0] sos_cnt;
+  reg [1:0] cnt;
+  reg [$clog2(SOS_NUM)-1:0] sos_cnt;
   
   wire [SAMP_WH+SAMP_FR-1:0] sos_outs[0:SOS_NUM];
   reg  [SOS_NUM-1:0] sos_ce;
+  reg  [SOS_NUM-1:0] sos_ce_end;
   reg  [SOS_NUM-1:0] sos_c_we;
   reg  [1:0] sos_c_addr;
 
@@ -48,32 +49,37 @@ module iir #(
                 (sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-1] == 0 &&  |sos_outs[SOS_NUM][SAMP_WH+SAMP_FR-2 -: SAMP_WH-1]) ? OVF-1 :
                  sos_outs[SOS_NUM][SAMP_FR:0];
 
-  //as clk but restarts on clk_fs
+  //restarts on clk_fs
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      cnt <= 1'b0;
+      cnt <= 2'b0;
     end else if (!c_we) begin
-      if (clk_fs) cnt <= 0;
-      else cnt <= !cnt;
+      if (clk_fs || cnt == 2) cnt <= 0;
+      else cnt <= cnt+1;
     end
   end
 
   //counts to SOS_NUM, restarts on clk_fs
-  always @(negedge clk or negedge nrst) begin
+  always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      sos_cnt <= 1'b0;
+      sos_cnt <= 0;
     end else if (!c_we) begin
       if (clk_fs) sos_cnt <= 0;
       else if (sos_cnt == SOS_NUM) sos_cnt <= SOS_NUM;
-      else if (cnt == 1) sos_cnt = sos_cnt + 1;
+      else if (cnt[1]) sos_cnt = sos_cnt + 1;
     end
   end
   
   //enable SOS number == sos_cnt
   always @(*) begin //or maybe "for" cycle
     if (c_we) sos_ce = 0;
-    else sos_ce = 1 << sos_cnt;
+    else sos_ce = cnt[1] ? 0 : 1 << sos_cnt;
   end
+
+ /* always @(*) begin //or maybe "for" cycle
+    if (c_we) sos_ce_end = 0;
+    else sos_ce_end = cnt[1] ? 1 << sos_cnt : 0;
+  end*/
 
   integer j;
 
@@ -120,7 +126,8 @@ module iir #(
         .nrst(nrst),
         .clk(clk),
         .ce(sos_ce[i]),
-        .mult_sel(cnt),
+     //   .ce_end(sos_ce_end[i]),
+        .mult_sel(cnt[0]),
         .c_we(sos_c_we[i]),
         .c_in(c_in),
         .c_addr(sos_c_addr),
