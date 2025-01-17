@@ -63,7 +63,7 @@ module iir #(
     end else if (!c_we) begin
       if (clk_fs) sos_cnt <= 0;
       else if (sos_cnt == SOS_NUM) sos_cnt <= SOS_NUM;
-      else if (cnt[1]) sos_cnt = sos_cnt + 1;
+      else if (cnt[1]) sos_cnt <= sos_cnt + 1;
     end
   end
 
@@ -93,7 +93,7 @@ module iir #(
 
   always @(posedge clk or negedge nrst) begin
     if (!nrst) mult_sel <= 0;
-    else mult_sel = !mult_sel;
+    else mult_sel <= !mult_sel;
   end
 
   genvar i;
