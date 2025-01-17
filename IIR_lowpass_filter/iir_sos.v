@@ -22,18 +22,8 @@ module iir_sos #(
   output wire [SAMP_WH+SAMP_FR-1:0] dout
 );
 
-  reg ce_del;
-  
-  always @(posedge clk) begin
-    ce_del <= ce;
-  end
-  
+  reg  ce_del;
   wire ce_end;
-  
-  assign ce_end = !(ce || !ce_del);
-
-  reg  [COEFF_FR-1:0] a_lsb [0:1];
-  wire [COEFF_FR-1:0] sel_a_lsb;
   
   reg  [COEFF_WH+COEFF_FR-1:0] a_coeff [0:1];
   reg  [COEFF_WH+COEFF_FR-1:0] b_coeff;
@@ -45,12 +35,14 @@ module iir_sos #(
   reg  [REC_WH+REC_FR-1:0] sum_a_del_1;
   wire [REC_WH+REC_FR-1:0] sel_sum_a_del;
 
-  reg  [COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
-  wire [COEFF_FR+REC_WH+REC_FR-1:0] a_prod_lsb;
+  wire [COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
   wire [COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
 
+  reg  [REC_WH+REC_FR:0] a_prod_round;
+  reg  [REC_WH+REC_FR:0] b_prod_round;
+
   wire [REC_WH+REC_FR-1:0] a_prod_conv;
-  reg  [REC_WH+REC_FR-1:0] b_prod_conv;
+  wire [REC_WH+REC_FR-1:0] b_prod_conv;
   reg  [REC_WH+REC_FR-1:0] acc;
 
   wire [REC_WH+REC_FR-1:0]   out;
@@ -60,28 +52,30 @@ module iir_sos #(
   reg  [SAMP_WH+SAMP_FR-1:0] K_din;
   
   assign dout = out_r;
-
   
-
+  always @(posedge clk) begin
+    ce_del <= ce;
+  end
+  
+  assign ce_end = !(ce || !ce_del);
+  
   assign K_prod = $signed(K_coeff)*$signed(din);
- // assign K_din = ({{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}}, K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1)>>>1;
 
   assign sel_sum_a_del = (mult_sel) ? sum_a_del_1 : sum_a_del_0;
   assign sel_coeff     = (mult_sel) ? a_coeff[1] : a_coeff[0];
-  assign sel_a_lsb     = (mult_sel) ? a_lsb[0] : a_lsb[1];
 
-  assign a_prod_lsb = $signed(a_prod)+$signed(sel_a_lsb);
+  assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-  assign a_prod_conv = (a_prod_lsb[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
-  //assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
+  assign a_prod_conv = (a_prod_round+1)>>>1;
+  assign b_prod_conv = (b_prod_round+1)>>>1;
 
   assign sum_a = $signed(K_din)+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
 
   always @(posedge clk) begin
-      a_prod <= $signed(sel_sum_a_del)*$signed(sel_coeff);
-      b_prod_conv <= (b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
+      a_prod_round <= a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
+      b_prod_round <= b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
       K_din <= ({{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}}, K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1)>>>1;
   end
 
@@ -108,23 +102,12 @@ module iir_sos #(
     end
   end
 
-  //assign acc_rst = nrst && ce;
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       acc <= 0;
     end else begin
       if (ce) acc <= $signed(acc) + $signed(a_prod_conv);
       else acc <= 0;
-    end
-  end
-
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      a_lsb[0] <= 0;
-      a_lsb[1] <= 0;
-    end else if (ce) begin
-      if (mult_sel) a_lsb[0] <= a_prod_lsb[COEFF_FR-1:0];
-      else a_lsb[1] <= a_prod_lsb[COEFF_FR-1:0];
     end
   end
 

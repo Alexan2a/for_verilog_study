@@ -68,7 +68,7 @@ module iir #(
   end
 
   //enable SOS number == sos_cnt
-  always @(*) begin //or maybe "for" cycle
+  always @(*) begin
     if (c_we) sos_ce = 0;
      else sos_ce = cnt[1] ? 0 : 1 << sos_cnt;
   end
