@@ -1,140 +1,109 @@
-module iir_sos #(
+module iir #(
+  parameter ORD = 10, 
   parameter SAMP_WH = 4,
   parameter SAMP_FR = 23,
   parameter COEFF_WH = 2,
   parameter COEFF_FR = 14,
+  parameter REC_WH = 8,
+  parameter REC_FR = 24,
   parameter K_WH = 1,
   parameter K_FR = 15,
-  parameter REC_WH = 8,
-  parameter REC_FR = 24
+  parameter D = 52
 ) (
-  input  wire nrst,
   input  wire clk,
-  input  wire ce,
-
-  input  wire mult_sel,
+  input  wire nrst,
 
   input  wire c_we,
-  input  wire [1:0] c_addr,
   input  wire [COEFF_WH+COEFF_FR-1:0] c_in,
+  input  wire [$clog2(ORD*2)-1:0] c_addr,
 
-  input  wire [SAMP_WH+SAMP_FR-1:0] din,
-  output wire [SAMP_WH+SAMP_FR-1:0] dout
+  input  wire [15:0] din,
+  output wire [SAMP_FR:0] dout
 );
 
-  reg ce_del;
-  
-  always @(posedge clk) begin
-    ce_del <= ce;
-  end
-  
-  wire ce_end;
-  
-  assign ce_end = !(ce || !ce_del);
+  wire clk_fs; 
 
-  reg [SAMP_WH+SAMP_FR-1:0]din_r;
+  clock_divider #(D) i_clk_div(
+    .in_clk(clk), 
+    .rst(nrst),
+    .out_clk(clk_fs)
+  );
 
-  reg  [COEFF_FR-1:0] a_lsb [0:1];
-  wire [COEFF_FR-1:0] sel_a_lsb;
-  
-  reg  [COEFF_WH+COEFF_FR-1:0] a_coeff [0:1];
-  reg  [COEFF_WH+COEFF_FR-1:0] b_coeff;
-  reg  [COEFF_WH+COEFF_FR-1:0] K_coeff;
-  wire [COEFF_WH+COEFF_FR-1:0] sel_coeff;  
+  localparam SOS_NUM = ORD / 2;
 
-  wire [REC_WH+REC_FR-1:0] sum_a;
-  reg  [REC_WH+REC_FR-1:0] sum_a_del_0;
-  reg  [REC_WH+REC_FR-1:0] sum_a_del_1;
-  wire [REC_WH+REC_FR-1:0] sel_sum_a_del;
+  reg [1:0] cnt;
+  reg [$clog2(SOS_NUM)-1:0] sos_cnt;
 
-  wire [COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
-  wire [COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
+  wire [SAMP_WH+SAMP_FR-1:0] sos_samples[0:SOS_NUM];
+  reg  [SOS_NUM-1:0] sos_ce;
+  reg  [SOS_NUM-1:0] sos_c_we;
+  reg  [1:0] sos_c_addr;
 
-  wire [REC_WH+REC_FR-1:0] a_prod_conv;
-  wire [REC_WH+REC_FR-1:0] b_prod_conv;
-  wire [REC_WH+REC_FR-1:0] din_conv;
-  reg  [REC_WH+REC_FR-1:0] acc;
+  assign sos_samples[0] = {{(SAMP_WH+SAMP_FR-16){din[15]}}, din} << (SAMP_FR-15);
 
-  wire [REC_WH+REC_FR-1:0]   out;
-  reg  [SAMP_WH+SAMP_FR-1:0] out_r;
+  localparam OVF = 2 ** SAMP_FR;
+  assign dout = (sos_samples[SOS_NUM][SAMP_WH+SAMP_FR-1] == 1 && ~&sos_samples[SOS_NUM][SAMP_WH+SAMP_FR-2 -: SAMP_WH-1]) ? OVF   :
+                (sos_samples[SOS_NUM][SAMP_WH+SAMP_FR-1] == 0 &&  |sos_samples[SOS_NUM][SAMP_WH+SAMP_FR-2 -: SAMP_WH-1]) ? OVF-1 :
+                 sos_samples[SOS_NUM][SAMP_FR:0];
 
-  wire [SAMP_WH+SAMP_FR+K_WH+K_FR-1:0] K_prod;
-  wire [SAMP_WH+SAMP_FR-1:0] K_din;
-  
-  assign dout = out_r;
-
-  
-  always @(posedge clk) begin
-    din_r <= din;
-  end
-  
-
-  assign K_prod = $signed(K_coeff)*$signed(din);
-  assign K_din = ({{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}},K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1)>>>1;
-
-  assign sel_sum_a_del = (mult_sel) ? sum_a_del_1 : sum_a_del_0;
-  assign sel_coeff     = (mult_sel) ? a_coeff[1] : a_coeff[0];
-  assign sel_a_lsb     = (mult_sel) ? a_lsb[1] : a_lsb[0];
-
-  assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff)+$signed(sel_a_lsb);
-  assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
-
-  assign a_prod_conv = (a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
-  assign b_prod_conv = (b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1]+1)>>>1;
-
-  assign sum_a = $signed(K_din)+$signed(acc);
-  assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
-
-
-  always @(posedge clk) begin
-    if (c_we) begin
-      case(c_addr)
-         2'b00: a_coeff[0] <= c_in;
-         2'b01: a_coeff[1] <= c_in;
-         2'b10: b_coeff    <= c_in;
-         2'b11: K_coeff    <= c_in;
-         default: begin
-         end
-      endcase
-    end
-  end
-
+  //restarts on clk_fs
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-        sum_a_del_0 <= 0;
-        sum_a_del_1 <= 0;
-    end else if (ce_end) begin
-        sum_a_del_0 <= sum_a;
-        sum_a_del_1 <= sum_a_del_0;
+      cnt <= 2'b0;
+    end else if (!c_we) begin
+      if (clk_fs || cnt == 2) cnt <= 0;
+      else cnt <= cnt+1;
     end
   end
 
-  //assign acc_rst = nrst && ce;
+  //counts to SOS_NUM, restarts on clk_fs
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      acc <= 0;
-    end else begin
-      if (ce) acc <= $signed(acc) + $signed(a_prod_conv);
-      else acc <= 0;
+      sos_cnt <= 0;
+    end else if (!c_we) begin
+      if (clk_fs) sos_cnt <= 0;
+      else if (sos_cnt == SOS_NUM) sos_cnt <= SOS_NUM;
+      else if (cnt[1]) sos_cnt = sos_cnt + 1;
     end
   end
 
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      a_lsb[0] <= 0;
-      a_lsb[1] <= 0;
-    end else if (ce) begin
-      if (mult_sel) a_lsb[1] <= a_prod[COEFF_FR-1:0];
-      else a_lsb[0] <= a_prod[COEFF_FR-1:0];
+  //enable SOS number == sos_cnt
+  always @(*) begin //or maybe "for" cycle
+    if (c_we) sos_ce = 0;
+     else sos_ce = cnt[1] ? 0 : 1 << sos_cnt;
+  end
+
+  integer j;
+
+  //write enable sos number == sos_cnt, c_addr decoder for sos coeffs
+  always @(*) begin
+    sos_c_we = 0;
+    sos_c_addr = 0;
+    if (c_addr < SOS_NUM*4) begin
+      for (j = 0; j < SOS_NUM*4; j = j+1) begin
+        if (c_addr >= j*4 && c_addr < (j+1)*4) begin
+          sos_c_we[j] = 1;
+          sos_c_addr = c_addr - j*4;
+        end
+      end
     end
   end
 
-  always @(posedge clk) begin
-    if (ce_end) begin
-      out_r <= (out[REC_WH+REC_FR-1] == 1 && ~&out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)   :
-               (out[REC_WH+REC_FR-1] == 0 &&  |out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)-1 :
-               (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
+  genvar i;
+  generate
+    for(i = 0; i < SOS_NUM; i = i + 1) begin
+      iir_sos #(SAMP_WH, SAMP_FR, COEFF_WH, COEFF_FR, K_WH, K_FR, REC_WH, REC_FR) i_iir_sos(
+        .nrst(nrst),
+        .clk(clk),
+        .ce(sos_ce[i]),
+        .mult_sel(cnt[0]),
+        .c_we(sos_c_we[i]),
+        .c_in(c_in),
+        .c_addr(sos_c_addr),
+        .din(sos_samples[i]),
+        .dout(sos_samples[i+1])
+      );
     end
-  end
+  endgenerate
 
 endmodule
