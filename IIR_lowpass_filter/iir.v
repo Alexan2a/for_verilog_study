@@ -80,13 +80,20 @@ module iir #(
     sos_c_we = 0;
     sos_c_addr = 0;
     if (c_addr < SOS_NUM*4) begin
-      for (j = 0; j < SOS_NUM*4; j = j+1) begin
+      for (j = 0; j < SOS_NUM; j = j+1) begin
         if (c_addr >= j*4 && c_addr < (j+1)*4) begin
           sos_c_we[j] = 1;
           sos_c_addr = c_addr - j*4;
         end
       end
     end
+  end
+
+  reg mult_sel;
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) mult_sel <= 0;
+    else mult_sel = !mult_sel;
   end
 
   genvar i;
@@ -96,7 +103,7 @@ module iir #(
         .nrst(nrst),
         .clk(clk),
         .ce(sos_ce[i]),
-        .mult_sel(cnt[0]),
+        .mult_sel(mult_sel),
         .c_we(sos_c_we[i]),
         .c_in(c_in),
         .c_addr(sos_c_addr),
