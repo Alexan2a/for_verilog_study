@@ -40,16 +40,21 @@ module iir_sos #(
 
   reg  [REC_WH+REC_FR:0] a_prod_round;
   reg  [REC_WH+REC_FR:0] b_prod_round;
-
+  wire [REC_WH+REC_FR:0] a_prod_pre_conv;
+  wire [REC_WH+REC_FR:0] b_prod_pre_conv;
+  
   wire [REC_WH+REC_FR-1:0] a_prod_conv;
   wire [REC_WH+REC_FR-1:0] b_prod_conv;
   reg  [REC_WH+REC_FR-1:0] acc;
 
   wire [REC_WH+REC_FR-1:0]   out;
+  wire [REC_WH+SAMP_FR:0]    out_pre_round;
+  wire [REC_WH+SAMP_FR-1:0]  out_round;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
 
   wire [SAMP_WH+SAMP_FR+K_WH+K_FR-1:0] K_prod;
-  reg  [SAMP_WH+SAMP_FR-1:0] K_din;
+  wire [REC_WH+REC_FR:0] K_prod_conv;
+  reg  [REC_WH+REC_FR-1:0] K_din;
   
   assign dout = out_r;
   
@@ -60,15 +65,19 @@ module iir_sos #(
   assign ce_end = !(ce || !ce_del);
   
   assign K_prod = $signed(K_coeff)*$signed(din);
-
+  assign K_prod_conv = {{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}}, K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1;
+  
   assign sel_sum_a_del = (mult_sel) ? sum_a_del_1 : sum_a_del_0;
   assign sel_coeff     = (mult_sel) ? a_coeff[1] : a_coeff[0];
 
   assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-  assign a_prod_conv = (a_prod_round+1)>>>1;
-  assign b_prod_conv = (b_prod_round+1)>>>1;
+
+  assign a_prod_pre_conv = a_prod_round+1;
+  assign b_prod_pre_conv = b_prod_round+1;
+  assign a_prod_conv = a_prod_pre_conv >> 1;
+  assign b_prod_conv = b_prod_pre_conv >> 1;
 
   assign sum_a = $signed(K_din)+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
@@ -76,7 +85,7 @@ module iir_sos #(
   always @(posedge clk) begin
       a_prod_round <= a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
       b_prod_round <= b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
-      K_din <= ({{(REC_WH-SAMP_WH-K_WH){K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1]}}, K_prod[SAMP_WH+SAMP_FR+K_WH+K_FR-1 -: SAMP_WH+K_WH+REC_FR+1]}+1)>>>1;
+      K_din <= K_prod_conv >> 1;
   end
 
   always @(posedge clk) begin
@@ -110,12 +119,15 @@ module iir_sos #(
       else acc <= 0;
     end
   end
-
+  
+  assign out_pre_round = out[REC_WH+REC_FR-1 -: REC_WH+SAMP_FR+1] + 1;
+  assign out_round = out_pre_round >> 1;
+  
   always @(posedge clk) begin
     if (ce_end) begin
-      out_r <= (out[REC_WH+REC_FR-1] == 1 && ~&out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)   :
-               (out[REC_WH+REC_FR-1] == 0 &&  |out[REC_WH+REC_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)-1 :
-               (out[SAMP_WH+REC_FR-1 -: SAMP_WH+SAMP_FR+1]+1)>>>1;
+      out_r <= (out_round[REC_WH+SAMP_FR-1] == 1 && ~&out_round[REC_WH+SAMP_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)   :
+               (out_round[REC_WH+SAMP_FR-1] == 0 &&  |out_round[REC_WH+SAMP_FR-2 -: REC_WH-SAMP_WH]) ? 2**(SAMP_WH+SAMP_FR-1)-1 :
+                out_round[SAMP_WH+SAMP_FR : 0];
     end
   end
 
