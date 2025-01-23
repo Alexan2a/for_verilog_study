@@ -38,17 +38,14 @@ module iir_sos #(
   wire [COEFF_FR+REC_WH+REC_FR-1:0] a_prod;
   wire [COEFF_FR+REC_WH+REC_FR-1:0] b_prod;
 
-  reg  [REC_WH+REC_FR:0] a_prod_round;
-  reg  [REC_WH+REC_FR:0] b_prod_round;
-  wire [REC_WH+REC_FR:0] a_prod_pre_conv;
-  wire [REC_WH+REC_FR:0] b_prod_pre_conv;
+  reg  [REC_WH+REC_FR:0] a_prod_pre_conv;
+  reg  [REC_WH+REC_FR:0] b_prod_pre_conv;
   
   wire [REC_WH+REC_FR-1:0] a_prod_conv;
   wire [REC_WH+REC_FR-1:0] b_prod_conv;
   reg  [REC_WH+REC_FR-1:0] acc;
 
   wire [REC_WH+REC_FR-1:0]   out;
-  wire [REC_WH+SAMP_FR:0]    out_pre_round;
   wire [REC_WH+SAMP_FR-1:0]  out_round;
   reg  [SAMP_WH+SAMP_FR-1:0] out_r;
 
@@ -73,18 +70,15 @@ module iir_sos #(
   assign a_prod = $signed(sel_sum_a_del)*$signed(sel_coeff);
   assign b_prod = $signed(sum_a_del_0)*$signed(b_coeff);
 
-
-  assign a_prod_pre_conv = a_prod_round+1;
-  assign b_prod_pre_conv = b_prod_round+1;
-  assign a_prod_conv = a_prod_pre_conv >> 1;
-  assign b_prod_conv = b_prod_pre_conv >> 1;
+  assign a_prod_conv = (a_prod_pre_conv + 1) >> 1;
+  assign b_prod_conv = (b_prod_pre_conv + 1) >> 1;
 
   assign sum_a = $signed(K_din)+$signed(acc);
   assign out = $signed(sum_a)+$signed(b_prod_conv)+$signed(sum_a_del_1);
 
   always @(posedge clk) begin
-      a_prod_round <= a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
-      b_prod_round <= b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
+      a_prod_pre_conv <= a_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
+      b_prod_pre_conv <= b_prod[REC_WH+REC_FR+COEFF_FR-1 -: REC_WH+REC_FR+1];
       K_din <= K_prod_conv >> 1;
   end
 
@@ -120,8 +114,7 @@ module iir_sos #(
     end
   end
   
-  assign out_pre_round = out[REC_WH+REC_FR-1 -: REC_WH+SAMP_FR+1] + 1;
-  assign out_round = out_pre_round >> 1;
+  assign out_round = (out[REC_WH+REC_FR-1 -: REC_WH+SAMP_FR+1] + 1) >> 1;
   
   always @(posedge clk) begin
     if (ce_end) begin
