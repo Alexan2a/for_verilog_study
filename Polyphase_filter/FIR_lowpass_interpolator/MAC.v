@@ -1,0 +1,67 @@
+module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
+  input  wire clk,
+  input  wire nrst,
+  input  wire en,
+  input  wire mem_en,
+  input  wire [COEFF_SIZE-1:0] coeff_a,
+  input  wire [COEFF_SIZE-1:0] coeff_b,
+
+  input  wire we,
+  input  wire [$clog2(SIZE)-1:0] addr_a,
+  input  wire [$clog2(SIZE)-1:0] addr_b,
+  input  wire [SAMPLE_SIZE-1:0] mem_in,
+  output wire [SAMPLE_SIZE-1:0] mem_out,
+
+  output wire [SAMPLE_SIZE+COEFF_SIZE-1:0] dout_a,
+  output wire [SAMPLE_SIZE+COEFF_SIZE-1:0] dout_b
+);
+
+  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult_a;
+  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult_b;
+  reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_a;
+  reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_b;
+  reg  acc_rst;
+
+  wire i_clk;
+  wire gnd;
+  wire vcc;
+  wire [SAMPLE_SIZE-1:0] mem_out_a;
+  wire [SAMPLE_SIZE-1:0] mem_out_b;
+
+  assign gnd = 1'b0;
+  assign vcc = 1'b1;
+  assign i_clk = (en) ? clk : 1'b0;
+
+  assign dout_a = acc_a;
+  assign dout_b = acc_b;
+  assign mem_out = mem_out_a;
+  
+  true_dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram( 
+    .clk_a(clk),
+    .clk_b(clk),
+    .en_a(mem_en),
+    .en_b(mem_en),
+    .we_a(we),
+    .we_b(gnd),
+    .addr_a(addr_a),
+    .addr_b(addr_b),
+    .din_a(mem_in),
+    .din_b(gnd),
+    .dout_a(mem_out_a),
+    .dout_b(mem_out_b)
+  );
+
+  assign mult_a = ($signed(mem_out_a) * $signed(coeff_a)) >>> 3; //32.30
+  assign mult_b = ($signed(mem_out_b) * $signed(coeff_b)) >>> 3; //32.30
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      acc_a <= 0;
+      acc_b <= 0;
+    end else if (en) begin 
+      acc_a <= $signed(acc_a) + $signed(mult_a); //32.30
+      acc_b <= $signed(acc_b) + $signed(mult_b); //32.30
+    end
+  end
+
+endmodule
