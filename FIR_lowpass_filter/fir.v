@@ -1,8 +1,13 @@
-module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
+module fir #(
+  parameter ORD = 256,
+  parameter D = 52,
+  parameter SAMPLE_SIZE = 16,
+  parameter COEFF_SIZE = 16)
+(
   input  wire nrst,
   input  wire clk,
   input  wire [SAMPLE_SIZE-1:0] din,
-  output wire [SAMPLE_SIZE-1:0] dout,
+  output reg  [SAMPLE_SIZE-1:0] dout,
 
   input  wire c_WE,
   input  wire [COEFF_SIZE-1:0] c_in,
@@ -15,14 +20,12 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   //ORD - order of filter
   
   localparam MAC_SIZE = (ORD+1)/6;
-  localparam MAC_NUM = (((ORD/2) + (D-3))/(D - 3));
+  localparam MAC_NUM = (((ORD/2) + (D-2))/(D - 2));
   localparam RND = 2**(SAMPLE_SIZE-1);
 
-  reg [SAMPLE_SIZE-1:0]          out_r;
-  reg [SAMPLE_SIZE+COEFF_SIZE:0] sum_r;
+  reg [SAMPLE_SIZE+COEFF_SIZE:0] sum;
 
   wire [SAMPLE_SIZE+2 : 0] sum_round;
-  wire [1:0] check_sum;
 
   reg                  mac_s_we;
   reg [MAC_NUM-1:0]    mac_c_we;
@@ -57,14 +60,12 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
     clk_fs_dl <= clk_fs;
   end
 
-  assign dout = out_r;
-
   //counts sum of MAC outputs format Q16.15
-  integer j;
+  integer j,k;
   always @(*) begin
-    sum_r = 0;
-    for(j = 0; j < MAC_NUM; j = j + 1) begin
-      sum_r = $signed(sum_r) + $signed(mac_outs[j]);  //33.30
+    sum = mac_outs[0];
+    for(j = 1; j < MAC_NUM; j = j + 1) begin
+      sum = $signed(sum) + $signed(mac_outs[j]);  //33.30
     end
   end
 
@@ -76,7 +77,7 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   //                                            +1                       //
   //              !!!: 14's will be deleted                              //
   //                                                                     //
-  //     check_sum is [(32),(31),30] from sum_r                          //       
+  //     check:       [(32),(31),30] from sum_r                          //       
   //                  [(18),(17),16] from sum_round                      //
   //                                                                     //
   //              !!!: 32'nd, 31'st (18's, 17's) will be deleted         //
@@ -85,8 +86,21 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   //                                                                     //        
   /////////////////////////////////////////////////////////////////////////
 
-  assign sum_round = sum_r[SAMPLE_SIZE+COEFF_SIZE -: SAMPLE_SIZE+3]+1; //19.16
-  assign check_sum = sum_round[SAMPLE_SIZE+2 -: 3]; 
+  assign sum_round = sum[SAMPLE_SIZE+COEFF_SIZE -: SAMPLE_SIZE+3]+1;  //19.16
+
+  reg [$clog2(ORD+1)-1:0] valid_data_cnt;
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      valid_data_cnt <= 0;
+    end else if (!c_WE) begin
+      if (clk_fs) begin
+        if (valid_data_cnt == ORD+1) valid_data_cnt <= ORD+1;
+        else valid_data_cnt <= valid_data_cnt + 1;
+      end
+    end
+  end
+
+  assign valid_data = (valid_data_cnt == ORD+1) ? 1 : 0;
 
   // for 1'st sample memory
   always @(posedge clk or negedge nrst) begin
@@ -133,13 +147,15 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
     end
   end
   
-  always @(posedge clk) begin
-    if (clk_fs) begin
-      if (!c_WE) begin
-        out_r <= (check_sum == 3'b001 || check_sum == 3'b010) ? RND-1 :
-                 (check_sum == 3'b110 || check_sum == 3'b101) ? RND :
-                  sum_round[SAMPLE_SIZE : 1];
-      end
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      dout <= 0;
+    end else if (clk_fs) begin
+      if (valid_data && !c_WE) begin
+          dout <= (sum_round[SAMPLE_SIZE+2] == 1 && ~&sum_round[SAMPLE_SIZE+2 -: 2]) ? RND   :
+                  (sum_round[SAMPLE_SIZE+2] == 0 &&  |sum_round[SAMPLE_SIZE+2 -: 2]) ? RND-1 :
+                   sum_round[SAMPLE_SIZE : 1];
+      end else dout <= 0;
     end
   end
 
@@ -182,30 +198,18 @@ module fir#(parameter ORD = 256, parameter D = 52, parameter SAMPLE_SIZE = 16, p
   
   always @(posedge clk) begin
     if (c_WE) begin
-
       mac_c_in <= c_in;
-      if (c_addr < MAC_SIZE) begin
-        mac_c_addr <= c_addr;
-        mac_c_we[0] <= 1;
-        mac_c_we[1] <= 0;
-        mac_c_we[2] <= 0;
-      end else if (c_addr > MAC_SIZE*2 - 1) begin
-        mac_c_addr <= (c_addr - MAC_SIZE*2);
-        mac_c_we[0] <= 0;
-        mac_c_we[1] <= 0;
-        mac_c_we[2] <= 1;
-      end else begin
-        mac_c_addr <= (c_addr - MAC_SIZE);
-        mac_c_we[0] <= 0;
-        mac_c_we[1] <= 1;
-        mac_c_we[2] <= 0;
+      for (j = 0; j < MAC_SIZE; j = j+1) begin
+        for (k = 0; k < MAC_NUM; k = k+1) begin
+          if (c_addr == j+k*MAC_SIZE) begin
+            mac_c_addr <= j;
+            mac_c_we <= 1 << k;
+          end
+        end
       end
-
     end else begin
-
       mac_c_we <= 0;
       mac_c_addr <= coeff_cnt;
-
     end
   end
 

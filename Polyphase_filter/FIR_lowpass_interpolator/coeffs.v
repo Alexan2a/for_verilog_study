@@ -68,7 +68,7 @@
      assign coeffs_array_0[64]  = 16'h00E0; \
      assign coeffs_array_0[65]  = 16'h01E5; \
      assign coeffs_array_0[66]  = 16'h02C0; \
-     assign coeffs_array_0[67]  = 16'h0254; \
+     assign coeffs_array_0[67]  = 16'h0354; \
      assign coeffs_array_0[68]  = 16'h038B; \
      assign coeffs_array_0[69]  = 16'h0359; \
      assign coeffs_array_0[70]  = 16'h02BC; \

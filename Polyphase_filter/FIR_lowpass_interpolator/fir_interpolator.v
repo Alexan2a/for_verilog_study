@@ -1,7 +1,7 @@
 module fir_interpolator#(
   parameter ORD = 255, 
   parameter M = 8,
-  parameter D = 52,
+  parameter D = 100,
   parameter COEFF_SIZE = 16, 
   parameter SAMPLE_SIZE = 16,
   parameter MAC_NUM = 1)
