@@ -22,6 +22,8 @@ module fir_interpolator#(
   localparam MAC_COEFF_NUM = MAC_POLY_NUM*M;
   localparam IS_ONE = (MAC_NUM_FIX == 1) ? 1 : 0;
   localparam IS_ODD = (MAC_NUM_FIX%2 == 1) ? 1 : 0;
+  
+  localparam GND = 0;
 
   wire clk_fs_new;
   wire clk_fs_old;
@@ -30,8 +32,8 @@ module fir_interpolator#(
   reg  clk_fs_new_d2;
 
   reg  en, en_r;
-  wire mem_en, we;
-  wire vcc, gnd;
+  wire sample_mem_en, coeff_mem_en;
+  wire we;
   wire [$clog2(MAC_POLY_NUM)-1:0] poly_addr;
   wire valid_data;
 
@@ -55,8 +57,10 @@ module fir_interpolator#(
 
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] sum_a;
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] sum_b;
-  wire [SAMPLE_SIZE:0]   sum_a_round;
-  wire [SAMPLE_SIZE:0]   sum_b_round;
+  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] sum_a_scaled;
+  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] sum_b_scaled;
+  wire [SAMPLE_SIZE+1:0] sum_a_round;
+  wire [SAMPLE_SIZE+1:0] sum_b_round;
   wire [SAMPLE_SIZE-1:0] sum_a_conv;
   wire [SAMPLE_SIZE-1:0] sum_b_conv;
   reg  [SAMPLE_SIZE-1:0] phases [0:M/2-1];
@@ -164,7 +168,8 @@ module fir_interpolator#(
   end
 
   assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
-  assign mem_en = !c_we && (en_r || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)));
+  assign sample_mem_en = !c_we && (en_r || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)));
+  assign coeff_mem_en = c_we || en_r;
   assign we = clk_fs_new_d1 && clk_fs_old;
   assign acc_nrst = nrst && !clk_fs_new_d2;
 
@@ -215,7 +220,7 @@ module fir_interpolator#(
       end
     end
   end
-
+  
   always @(*) begin
     sum_a = dout_a[0];
     sum_b = dout_b[0];
@@ -225,20 +230,23 @@ module fir_interpolator#(
     end
   end
 
-  assign sum_a_round = (sum_a[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1) >> 1;
-  assign sum_b_round = (sum_b[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1) >> 1;
+  assign sum_a_scaled = $signed(sum_a)*M;
+  assign sum_b_scaled = $signed(sum_b)*M;
+
+  assign sum_a_round = sum_a_scaled[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1;
+  assign sum_b_round = sum_b_scaled[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1;
 
   localparam OVF = 2**(SAMPLE_SIZE-1);
 
-  assign sum_a_conv = (sum_a_round[SAMPLE_SIZE -: 2] == 2'b10) ? OVF   :
-                      (sum_a_round[SAMPLE_SIZE -: 2] == 2'b01) ? OVF-1 :
-                       sum_a_round[SAMPLE_SIZE-1:0];
+  assign sum_a_conv = (sum_a_round[SAMPLE_SIZE+1 -: 2] == 2'b10) ? OVF   :
+                      (sum_a_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF-1 :
+                       sum_a_round[SAMPLE_SIZE:1];
 
-  assign sum_b_conv = (sum_b_round[SAMPLE_SIZE -: 2] == 2'b10) ? OVF   :
-                      (sum_b_round[SAMPLE_SIZE -: 2] == 2'b01) ? OVF-1 :
-                       sum_b_round[SAMPLE_SIZE-1:0];
+  assign sum_b_conv = (sum_b_round[SAMPLE_SIZE+1 -: 2] == 2'b10) ? OVF   :
+                      (sum_b_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF-1 :
+                       sum_b_round[SAMPLE_SIZE:1];
   
-  always @(posedge clk) begin
+  always @(posedge clk or negedge nrst) begin
       if (!nrst) begin
         for (j = 0; j < M/2; j = j+1) begin //maybe should remove this nrst, I don't know if it has sense
           phases[j] <= 0;
@@ -264,8 +272,6 @@ module fir_interpolator#(
     end
 
   assign samples[0] = din;
-  assign vcc = 1;
-  assign gnd = 0;
   
   genvar i;
   generate
@@ -275,7 +281,7 @@ module fir_interpolator#(
           .clk(clk),
           .nrst(acc_nrst),
           .en(en),
-          .mem_en(mem_en),
+          .mem_en(sample_mem_en),
           .coeff_a(coeff_out[(MAC_NUM_FIX-1)/2]),
           .coeff_b(coeff_out[(MAC_NUM_FIX-1)/2]),
           .we(we),
@@ -288,6 +294,7 @@ module fir_interpolator#(
         );
         single_port_RAM #(COEFF_SIZE, (MAC_COEFF_NUM+1)/2) coeff_single_ram(
           .clk(clk),
+          .en(coeff_mem_en),
           .we(coeff_we[i+1-IS_ONE]),
           .addr(coeff_addr),
           .din(c_in),
@@ -299,7 +306,7 @@ module fir_interpolator#(
           .clk(clk),
           .nrst(acc_nrst),
           .en(en),
-          .mem_en(mem_en),
+          .mem_en(sample_mem_en),
           .coeff_a(coeff_out[i]),
           .coeff_b(coeff_out[MAC_NUM_FIX-1-i]),
           .we(we),
@@ -314,7 +321,7 @@ module fir_interpolator#(
           .clk(clk),
           .nrst(acc_nrst),
           .en(en),
-          .mem_en(mem_en),
+          .mem_en(sample_mem_en),
           .coeff_a(coeff_out[MAC_NUM_FIX-1-i]),
           .coeff_b(coeff_out[i]),
           .we(we),
@@ -328,14 +335,14 @@ module fir_interpolator#(
         true_dual_port_RAM #(COEFF_SIZE, MAC_COEFF_NUM) coeff_dual_ram(
           .clk_a(clk),
           .clk_b(clk),
-          .en_a(vcc),
-          .en_b(vcc),
+          .en_a(coeff_mem_en),
+          .en_b(en_r),
           .we_a(coeff_we[i]),
-          .we_b(gnd),
+          .we_b(GND),
           .addr_a(coeff_addr_a),
           .addr_b(coeff_addr_b),
           .din_a(c_in),
-          .din_b(gnd),
+          .din_b(GND),
           .dout_a(coeff_out[i]),
           .dout_b(coeff_out[MAC_NUM_FIX-1-i])
         );

@@ -16,21 +16,16 @@ module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SI
   output wire [SAMPLE_SIZE+COEFF_SIZE-1:0] dout_b
 );
 
+  localparam GND = 0;
+  
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult_a;
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult_b;
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_a;
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_b;
   reg  acc_rst;
 
-  wire i_clk;
-  wire gnd;
-  wire vcc;
   wire [SAMPLE_SIZE-1:0] mem_out_a;
   wire [SAMPLE_SIZE-1:0] mem_out_b;
-
-  assign gnd = 1'b0;
-  assign vcc = 1'b1;
-  assign i_clk = (en) ? clk : 1'b0;
 
   assign dout_a = acc_a;
   assign dout_b = acc_b;
@@ -42,11 +37,11 @@ module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SI
     .en_a(mem_en),
     .en_b(mem_en),
     .we_a(we),
-    .we_b(gnd),
+    .we_b(GND),
     .addr_a(addr_a),
     .addr_b(addr_b),
     .din_a(mem_in),
-    .din_b(gnd),
+    .din_b(GND),
     .dout_a(mem_out_a),
     .dout_b(mem_out_b)
   );

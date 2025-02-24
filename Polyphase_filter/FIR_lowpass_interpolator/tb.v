@@ -3,18 +3,21 @@
 
 module tb();
 
-  reg clk, clk_fs_new, clk_fs_old, c_we, nrst;
-  reg [15:0] din;
+  reg clk, clk_fs_new, clk_fs_old, c_we, nrst, check_en;
+  reg [15:0] check;
   wire [15:0] out;
   
   reg [15:0] in_vect[0:512], in;
   wire [15:0] coeffs_array_0[0:127];
-  integer N=0;
+  integer N=0, K=0, err_cnt=0;
 
   `COEFFS_ARRAY_0
 
   initial begin
+  check_en = 0;
   N = 0;
+  K = 0;
+  err_cnt = 0;
   in = 0;
   din = 16'd0;
   clk = 0;
@@ -23,8 +26,7 @@ module tb();
   c_we = 1;
   nrst = 0;
   #5 nrst = 1;
-  #80000 din[15] = 1;
-  #8000 din = 16'd0;
+  #257025 check_en = 1;
   end
 
   always #5 clk = !clk;
@@ -41,7 +43,7 @@ module tb();
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       cnt <= 0;
-    end else if (cnt == 127) begin //128
+    end else if (cnt == 127) begin
       cnt <= 127;
       c_we <= 1'b0;
     end else begin
@@ -56,7 +58,7 @@ module tb();
       $readmemb("Data_in.txt", in_vect);
     end
 
-  always @(clk_fs_old) begin
+  always @(posedge clk_fs_old) begin
     if (!c_we) begin
       N = N + 1;
       in = in_vect[N];
@@ -66,13 +68,29 @@ module tb();
   initial
     begin: file_IO_block
       FILE_1 = $fopen("Data_out.txt", "w");
-      #1000900 $fclose(FILE_1);
+      #530000 $fclose(FILE_1);
     end
 
-  always @(clk_fs_new)
+  always @(posedge clk_fs_new)
     begin: write_block
       $fdisplay(FILE_1, "0b%bs16", out);
     end
+
+  always @(posedge clk_fs_new) begin
+    if (check_en) begin
+      check = ((($signed(-coeffs_array_0[K])*M )>>> 2) + 1) >>> 1;
+      if (out != check) begin
+	err_cnt = err_cnt + 1;
+        $error("out: expected = %h, real = %h",check, out);
+      end
+      K = K + 1;
+    end
+  end
+
+  initial begin
+    #530000 $display("Output errors: %d", err_cnt);
+    $stop();
+  end
 
   fir_interpolator #(ORD,M,D,COEFF_SIZE,SAMPLE_SIZE) i_fir(
     .nrst(nrst),

@@ -24,8 +24,8 @@ module true_dual_port_RAM #(parameter N = 8, parameter M = 32)(
 
   always @(posedge clk_b) begin
     if (en_b) begin
-     if (we_b) ram[addr_b] <= din_b;
-     dout_b <= ram[addr_b];
+      if (we_b) ram[addr_b] <= din_b;
+      dout_b <= ram[addr_b];
     end
   end
 
