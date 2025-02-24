@@ -218,7 +218,7 @@ module fir_interpolator#(
 
   always @(*) begin
     sum_a = dout_a[0];
-    sum_b = dout_a[0];
+    sum_b = dout_b[0];
     for(j = 1; j < MAC_NUM_FIX; j = j + 1) begin
       sum_a = $signed(sum_a) + $signed(dout_a[j]);
       sum_b = $signed(sum_b) + $signed(dout_b[j]);
