@@ -8,7 +8,7 @@ module fir_interpolator#(
 (
   input  wire nrst,
   input  wire clk,
-  input  wire [2:0] div,
+  input  wire [$clog2(M/2+1)-1:0] div,
   input  wire [SAMPLE_SIZE-1:0] din,
   output reg [SAMPLE_SIZE-1:0] dout,
 
@@ -46,7 +46,7 @@ module fir_interpolator#(
 
   reg  [$clog2(M)-1:0] phase_step_cnt;
   reg  [$clog2(M)-1:0] phase_step_cnt_d;
-  reg  [2:0] div_phase_cnt;
+  reg  [$clog2(M/2+1)-1:0] div_phase_cnt;
 
   reg  [$clog2(MAC_POLY_NUM)-1:0] poly_step_cnt;
   reg  [$clog2(MAC_POLY_NUM)-1:0] poly_addr_cnt;
@@ -158,14 +158,6 @@ module fir_interpolator#(
     end
   end
 
-  assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
-
-  always @(posedge clk) begin
-    clk_fs_new_d0 <= clk_fs_new;
-    clk_fs_new_d1 <= clk_fs_new_d0;
-    clk_fs_new_d2 <= clk_fs_new_d1;
-  end
-
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       div_phase_cnt <= 0;
@@ -175,6 +167,17 @@ module fir_interpolator#(
         else div_phase_cnt <= div_phase_cnt + 1;
       end
     end
+  end
+
+  always @(posedge clk) begin
+    en_a <= en_pr_a;
+    en_b <= en_pr_b;
+  end
+
+  always @(posedge clk) begin
+    clk_fs_new_d0 <= clk_fs_new;
+    clk_fs_new_d1 <= clk_fs_new_d0;
+    clk_fs_new_d2 <= clk_fs_new_d1;
   end
   
   always @(posedge clk or negedge nrst) begin
@@ -186,18 +189,15 @@ module fir_interpolator#(
     end
   end
 
+  assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
+
   assign en_pr_a = (div_phase_cnt == 0) && en_pr;
   assign en_pr_b = (div_phase_cnt == div-1) && en_pr;
 
-  always @(posedge clk) begin
-    en_a <= en_pr_a;
-    en_b <= en_pr_b;
-  end
- 
   assign sample_mem_en = en_pr_a || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1));
-  assign coeff_mem_en = c_we || en_pr_a;
+  assign coeff_mem_en = en_pr_a || en_pr_b;
 
-  assign clk_div_out = (div == 1) ? clk_fs_new_d1 : (div_phase_cnt == 1) && clk_fs_new_d1;
+  assign clk_div_out = (div_phase_cnt == 1 || div == 1) && clk_fs_new_d1;
 
   assign we = clk_fs_new_d1 && clk_fs_old;
   assign acc_nrst = nrst && !clk_fs_new_d2;
@@ -334,7 +334,7 @@ module fir_interpolator#(
         );
         single_port_RAM #(COEFF_SIZE, (MAC_COEFF_NUM+1)/2) coeff_single_ram(
           .clk(clk),
-          .en(coeff_mem_en || en_pr_b),
+          .en(coeff_mem_en || c_we),
           .we(coeff_we[i+1-IS_ONE]),
           .addr(coeff_addr),
           .din(c_in),
@@ -379,8 +379,8 @@ module fir_interpolator#(
         true_dual_port_RAM #(COEFF_SIZE, MAC_COEFF_NUM) coeff_dual_ram(
           .clk_a(clk),
           .clk_b(clk),
-          .en_a(coeff_mem_en),
-          .en_b(en_pr_b),
+          .en_a(coeff_mem_en || c_we),
+          .en_b(coeff_mem_en),
           .we_a(coeff_we[i]),
           .we_b(GND),
           .addr_a(coeff_addr_a),
