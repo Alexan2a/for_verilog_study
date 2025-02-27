@@ -1,8 +1,10 @@
 module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 16)(
   input  wire clk,
   input  wire nrst,
-  input  wire en,
-  input  wire mem_en,
+  input  wire en_a,  
+  input  wire en_b,
+  input  wire mem_en_a,
+  input  wire mem_en_b,
   input  wire [COEFF_SIZE-1:0] coeff_a,
   input  wire [COEFF_SIZE-1:0] coeff_b,
 
@@ -34,8 +36,8 @@ module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SI
   true_dual_port_RAM #(SAMPLE_SIZE, SIZE) sample_ram( 
     .clk_a(clk),
     .clk_b(clk),
-    .en_a(mem_en),
-    .en_b(mem_en),
+    .en_a(mem_en_a),
+    .en_b(mem_en_b),
     .we_a(we),
     .we_b(GND),
     .addr_a(addr_a),
@@ -52,11 +54,18 @@ module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SI
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       acc_a <= 0;
-      acc_b <= 0;
-    end else if (en) begin 
+    end else if (en_a) begin 
       acc_a <= $signed(acc_a) + $signed(mult_a); //32.30
+    end
+  end
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      acc_b <= 0;
+    end else if (en_b) begin 
       acc_b <= $signed(acc_b) + $signed(mult_b); //32.30
     end
   end
+
 
 endmodule

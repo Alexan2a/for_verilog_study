@@ -19,7 +19,6 @@ module tb();
   K = 0;
   err_cnt = 0;
   in = 0;
-  din = 16'd0;
   clk = 0;
   clk_fs_new = 0;
   clk_fs_old = 0;
@@ -91,10 +90,11 @@ module tb();
     #530000 $display("Output errors: %d", err_cnt);
     $stop();
   end
-
+  wire [2:0] div = 2;
   fir_interpolator #(ORD,M,D,COEFF_SIZE,SAMPLE_SIZE) i_fir(
     .nrst(nrst),
     .clk(clk),
+    .div(div),
     .din(in),
     .dout(out),
 

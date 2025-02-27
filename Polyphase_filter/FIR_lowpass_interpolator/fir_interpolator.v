@@ -8,6 +8,7 @@ module fir_interpolator#(
 (
   input  wire nrst,
   input  wire clk,
+  input  wire [2:0] div,
   input  wire [SAMPLE_SIZE-1:0] din,
   output reg [SAMPLE_SIZE-1:0] dout,
 
@@ -31,17 +32,26 @@ module fir_interpolator#(
   reg  clk_fs_new_d1;
   reg  clk_fs_new_d2;
 
-  reg  en, en_r;
-  wire sample_mem_en, coeff_mem_en;
+  reg  en_pr;
+  wire en_pr_a, en_pr_b;
+  reg  en_a, en_b;
+  wire sample_mem_en;
+  wire coeff_mem_en;
+  wire clk_div_out;
   wire we;
-  wire [$clog2(MAC_POLY_NUM)-1:0] poly_addr;
-  wire valid_data;
+  wire acc_nrst;
 
   reg  [$clog2(POLY_NUM+1)-1:0] valid_data_cnt;
+  wire valid_data;
+
   reg  [$clog2(M)-1:0] phase_step_cnt;
+  reg  [$clog2(M)-1:0] phase_step_cnt_d;
+  reg  [2:0] div_phase_cnt;
+
   reg  [$clog2(MAC_POLY_NUM)-1:0] poly_step_cnt;
   reg  [$clog2(MAC_POLY_NUM)-1:0] poly_addr_cnt;
   reg  [$clog2(MAC_POLY_NUM)-1:0] poly_rev_addr_cnt;
+  wire [$clog2(MAC_POLY_NUM)-1:0] poly_addr;
   reg  [$clog2(MAC_POLY_NUM)-1:0] cnt;
 
   reg  [MAC_NUM_FIX/2+IS_ODD-1:0] coeff_we;
@@ -148,28 +158,47 @@ module fir_interpolator#(
     end
   end
 
-  always @(posedge clk) begin
-    en <= en_r;
-  end
+  assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
 
   always @(posedge clk) begin
     clk_fs_new_d0 <= clk_fs_new;
     clk_fs_new_d1 <= clk_fs_new_d0;
     clk_fs_new_d2 <= clk_fs_new_d1;
   end
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      div_phase_cnt <= 0;
+    end else if (!c_we) begin
+      if (clk_fs_new) begin
+        if (div_phase_cnt == div-1 || clk_fs_old) div_phase_cnt <= 0;
+        else div_phase_cnt <= div_phase_cnt + 1;
+      end
+    end
+  end
   
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      en_r <= 0;
+      en_pr <= 0;
     end else begin
-      if (cnt == MAC_POLY_NUM-1 || c_we) en_r <= 0;
-      else if (clk_fs_new_d1 && phase_step_cnt < (M+1)/2) en_r <= 1;
+      if (cnt == MAC_POLY_NUM-1 || c_we) en_pr <= 0;
+      else if (clk_fs_new_d1 && phase_step_cnt < (M+1)/2) en_pr <= 1;
     end
   end
 
-  assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
-  assign sample_mem_en = !c_we && (en_r || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)));
-  assign coeff_mem_en = c_we || en_r;
+  assign en_pr_a = (div_phase_cnt == 0) && en_pr;
+  assign en_pr_b = (div_phase_cnt == div-1) && en_pr;
+
+  always @(posedge clk) begin
+    en_a <= en_pr_a;
+    en_b <= en_pr_b;
+  end
+ 
+  assign sample_mem_en = en_pr_a || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1));
+  assign coeff_mem_en = c_we || en_pr_a;
+
+  assign clk_div_out = (div == 1) ? clk_fs_new_d1 : (div_phase_cnt == 1) && clk_fs_new_d1;
+
   assign we = clk_fs_new_d1 && clk_fs_old;
   assign acc_nrst = nrst && !clk_fs_new_d2;
 
@@ -246,13 +275,12 @@ module fir_interpolator#(
                       (sum_b_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF-1 :
                        sum_b_round[SAMPLE_SIZE:1];
   
-  reg [$clog2(M)-1:0] phase_step_cnt_d;
-  
   always @(posedge clk) begin
     if (clk_fs_new) begin
       phase_step_cnt_d <= phase_step_cnt;
     end
   end
+
   always @(posedge clk or negedge nrst) begin
       if (!nrst) begin
         for (j = 0; j < M/2; j = j+1) begin //maybe should remove this nrst, I don't know if it has sense
@@ -274,7 +302,7 @@ module fir_interpolator#(
       if (!nrst) begin
         dout <= 0;
       end else if (valid_data) begin
-        if (clk_fs_new_d1) begin
+        if (clk_div_out) begin
            if (phase_step_cnt_d >= (M+1)/2) dout <= phases[phase_step_cnt_d-(M+1)/2];
            else dout <= sum_a_conv;
         end
@@ -290,8 +318,10 @@ module fir_interpolator#(
         MAC #(MAC_POLY_NUM, SAMPLE_SIZE, COEFF_SIZE) i_MAC(
           .clk(clk),
           .nrst(acc_nrst),
-          .en(en),
-          .mem_en(sample_mem_en),
+          .en_a(en_a),
+          .en_b(en_b),
+          .mem_en_a(sample_mem_en),
+          .mem_en_b(en_pr_b),
           .coeff_a(coeff_out[(MAC_NUM_FIX-1)/2]),
           .coeff_b(coeff_out[(MAC_NUM_FIX-1)/2]),
           .we(we),
@@ -304,7 +334,7 @@ module fir_interpolator#(
         );
         single_port_RAM #(COEFF_SIZE, (MAC_COEFF_NUM+1)/2) coeff_single_ram(
           .clk(clk),
-          .en(coeff_mem_en),
+          .en(coeff_mem_en || en_pr_b),
           .we(coeff_we[i+1-IS_ONE]),
           .addr(coeff_addr),
           .din(c_in),
@@ -315,8 +345,10 @@ module fir_interpolator#(
         MAC #(MAC_POLY_NUM, SAMPLE_SIZE, COEFF_SIZE) i_MAC_a(
           .clk(clk),
           .nrst(acc_nrst),
-          .en(en),
-          .mem_en(sample_mem_en),
+          .en_a(en_a),
+          .en_b(en_b),
+          .mem_en_a(sample_mem_en),
+          .mem_en_b(en_pr_b),
           .coeff_a(coeff_out[i]),
           .coeff_b(coeff_out[MAC_NUM_FIX-1-i]),
           .we(we),
@@ -330,8 +362,10 @@ module fir_interpolator#(
         MAC #(MAC_POLY_NUM, SAMPLE_SIZE, COEFF_SIZE) i_MAC_b(
           .clk(clk),
           .nrst(acc_nrst),
-          .en(en),
-          .mem_en(sample_mem_en),
+          .en_a(en_a),
+          .en_b(en_b),
+          .mem_en_a(sample_mem_en),
+          .mem_en_b(en_pr_b),
           .coeff_a(coeff_out[MAC_NUM_FIX-1-i]),
           .coeff_b(coeff_out[i]),
           .we(we),
@@ -346,7 +380,7 @@ module fir_interpolator#(
           .clk_a(clk),
           .clk_b(clk),
           .en_a(coeff_mem_en),
-          .en_b(en_r),
+          .en_b(en_pr_b),
           .we_a(coeff_we[i]),
           .we_b(GND),
           .addr_a(coeff_addr_a),
