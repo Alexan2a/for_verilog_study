@@ -246,6 +246,13 @@ module fir_interpolator#(
                       (sum_b_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF-1 :
                        sum_b_round[SAMPLE_SIZE:1];
   
+  reg [$clog2(M)-1:0] phase_step_cnt_d;
+  
+  always @(posedge clk) begin
+    if (clk_fs_new) begin
+      phase_step_cnt_d <= phase_step_cnt;
+    end
+  end
   always @(posedge clk or negedge nrst) begin
       if (!nrst) begin
         for (j = 0; j < M/2; j = j+1) begin //maybe should remove this nrst, I don't know if it has sense
@@ -253,8 +260,11 @@ module fir_interpolator#(
         end
       end else if (!c_we && valid_data) begin
         if (clk_fs_new_d1) begin
-          for (j = 0; j < M/2; j = j+1) begin
-            if (phase_step_cnt == j+1) phases[j] <= sum_b_conv;
+          if (phase_step_cnt_d < M/2) begin
+            phases[0] <= sum_b_conv;
+            for (j = 0; j < M/2-1; j = j+1) begin
+                phases[j+1] <= phases[j];
+            end
           end
         end
       end
@@ -265,9 +275,9 @@ module fir_interpolator#(
         dout <= 0;
       end else if (valid_data) begin
         if (clk_fs_new_d1) begin
-            if (phase_step_cnt == 0 || phase_step_cnt > (M+1)/2) dout <= phases[(phase_step_cnt == 0)? 0 : M-phase_step_cnt];
-            else dout <= sum_a_conv;
-          end
+           if (phase_step_cnt_d >= (M+1)/2) dout <= phases[phase_step_cnt_d-(M+1)/2];
+           else dout <= sum_a_conv;
+        end
       end
     end
 
