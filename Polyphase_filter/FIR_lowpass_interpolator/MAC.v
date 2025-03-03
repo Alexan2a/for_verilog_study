@@ -24,7 +24,6 @@ module MAC #(parameter SIZE = 43, parameter SAMPLE_SIZE = 16, parameter COEFF_SI
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult_b;
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_a;
   reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc_b;
-  reg  acc_rst;
 
   wire [SAMPLE_SIZE-1:0] mem_out_a;
   wire [SAMPLE_SIZE-1:0] mem_out_b;
