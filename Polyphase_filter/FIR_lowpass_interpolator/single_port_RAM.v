@@ -12,7 +12,7 @@ module single_port_RAM #(parameter N=8, parameter M=32)(
   always @(posedge clk) begin
     if (en) begin
       if (we) ram[addr] <= din;
-      dout <= ram[addr];
+      else dout <= ram[addr];
     end
   end
 
