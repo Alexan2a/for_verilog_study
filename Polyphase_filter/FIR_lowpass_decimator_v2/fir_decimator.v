@@ -1,0 +1,257 @@
+module fir_decimator#(
+  parameter ORD = 255,
+  parameter M = 8, 
+  parameter D = 100,
+  parameter COEFF_SIZE = 16, 
+  parameter SAMPLE_SIZE = 16,
+  parameter MAC_NUM = 1
+)(
+  input  wire nrst,
+  input  wire en,
+  input  wire clk,
+  input  wire [SAMPLE_SIZE-1:0] din,
+  output reg  [SAMPLE_SIZE-1:0] dout,
+
+  input  wire c_we,
+  input  wire [COEFF_SIZE-1:0] c_in,
+  input  wire [$clog2(ORD + 1)-1:0] c_addr
+);
+
+  localparam POLY_NUM = (ORD+1)/M;
+  localparam IS_ODD = (M % 2 == 0) ? 0 : 1;
+  localparam MAC_NUM_FIX = ((POLY_NUM+(D-2)-1)/(D-2) > MAC_NUM) ? (POLY_NUM+(D-2)-1)/(D-2) : MAC_NUM;
+  localparam MAC_SIZE = (POLY_NUM+MAC_NUM-1)/MAC_NUM;
+
+  wire clk_fs_old;
+  wire clk_fs_new;
+
+  reg clk_fs_old_d0;
+  reg clk_fs_old_d1;
+  reg clk_fs_old_d2;
+
+  reg  [$clog2(M)-1:0] cnt;
+  reg  [$clog2(M)-1:0] cnt_d;
+  reg  [$clog2(MAC_SIZE+1)-1:0] mac_cnt;
+  reg  mac_en;
+  reg  [M-1:0] mem_en;
+  reg  [$clog2(POLY_NUM)-1:0] coeff_addr;
+  reg  [M-1:0] coeff_we;
+
+  reg  [SAMPLE_SIZE-1:0] mac_s_in [0:MAC_NUM-1];
+  reg  [COEFF_SIZE-1:0]  mac_c_in [0:MAC_NUM-1];
+  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mac_dout [0:MAC_NUM-1];
+  reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] sum;
+
+  wire [SAMPLE_SIZE*MAC_NUM_FIX-1:0] s_out [0:M-1];
+  wire [COEFF_SIZE*MAC_NUM_FIX -1:0] c_out [0:(M+IS_ODD)/2-1];
+
+  reg  [SAMPLE_SIZE+COEFF_SIZE-1:0] acc;
+  wire [SAMPLE_SIZE+1:0] acc_round;
+  wire [SAMPLE_SIZE-1:0] acc_conv;
+
+  reg  [$clog2(ORD+2)-1:0] valid_data_cnt;
+  wire valid_data;
+
+  clock_divider #(D) i_clk_div_0(
+    .in_clk(clk), 
+    .rst(nrst),
+    .out_clk(clk_fs_old)
+  );
+
+  clock_divider #(M) i_clk_div_1(
+    .in_clk(clk_fs_old), 
+    .rst(nrst),
+    .out_clk(clk_fs_new)
+  );
+
+  always @(posedge clk) begin
+    clk_fs_old_d0 <= clk_fs_old;
+    clk_fs_old_d1 <= clk_fs_old_d0;
+    clk_fs_old_d2 <= clk_fs_old_d1;
+  end
+
+  //check if memories are empty
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      valid_data_cnt <= 0;
+    end else if (!c_we) begin
+      if (clk_fs_old_d1) begin
+        if (valid_data_cnt == ORD+1) valid_data_cnt <= ORD+1;
+        else valid_data_cnt <= valid_data_cnt + 1;
+      end
+    end
+  end
+
+  assign valid_data = (valid_data_cnt == ORD+1) ? 1 : 0;
+
+  always @(posedge clk) begin
+    cnt_d <= cnt;
+  end
+
+  //counts step of 'fir'
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      cnt <= 0;
+    end else if (!c_we) begin
+      if (clk_fs_old) begin
+        if (clk_fs_new) cnt <= M-2;
+        else if (cnt == 0) cnt <= M-1;
+        else cnt <= cnt - 1;
+      end
+    end
+  end
+
+  //enable memories according to cnt
+  integer j,k;
+  always @(*) begin
+    if (c_we) begin
+      mem_en = coeff_we;
+    end else begin
+      for (j = 0; j < M; j = j+1) begin
+        if (cnt == j) mem_en = 1 << j;
+      end
+    end
+  end
+
+  //counts mac step
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      mac_cnt <= 0;
+    end else if (!c_we) begin
+      if (clk_fs_old_d2) mac_cnt <= 0;
+      else if (mac_cnt == MAC_SIZE) mac_cnt <= MAC_SIZE;
+      else mac_cnt <= mac_cnt + 1;
+    end
+  end
+
+  //enable mac accumulator
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      mac_en <= 0;
+    end else begin
+      if (mac_cnt == MAC_SIZE-1 || c_we) mac_en <= 0;
+      else if (clk_fs_old_d2) mac_en <= 1;
+    end
+  end
+
+  //mac input mux
+  always @(*) begin
+    for (j = 0; j < M; j = j+1) begin
+      for (k = 0; k < MAC_NUM; k = k+1) begin
+        if (cnt_d == j) begin
+          if (j < (M+IS_ODD)/2) mac_c_in[k] = c_out[j][k*COEFF_SIZE +: COEFF_SIZE];
+          else mac_c_in[k] = c_out[M-j-1][k*COEFF_SIZE +: COEFF_SIZE];
+          mac_s_in[k] = s_out[j][k*SAMPLE_SIZE +: SAMPLE_SIZE];
+        end 
+      end
+    end
+  end
+  
+  //coeff adress decoder
+  always @(*) begin
+    for (j = 0; j < POLY_NUM; j = j+1) begin
+      for (k = 0; k < M; k = k+1) begin
+        if (c_addr == k+j*M) begin
+          coeff_addr = j;
+          coeff_we = (c_we) ? 1 << k : 0;
+        end
+      end
+    end
+  end
+
+  //resets
+  wire acc_nrst;
+  wire mac_nrst;
+  assign acc_nrst = nrst && !(clk_fs_new && clk_fs_old_d0);
+//assign acc_nrst = nrst && !((cnt == M-1) && clk_fs_old);
+  assign mac_nrst = nrst && !clk_fs_old_d2;
+
+  //counts sum of mac outs
+  always @(*) begin
+    if (valid_data) begin
+      sum = mac_dout[0];
+      for(j = 1; j < MAC_NUM; j = j + 1) begin
+        sum = $signed(sum) + $signed(mac_dout[j]);
+      end
+    end else sum = 0;
+  end
+
+  //accumulate outputs of phases
+  always @(posedge clk or negedge acc_nrst) begin
+    if (!acc_nrst) begin
+      acc <= 0;
+    end else if (!c_we && clk_fs_old_d1) begin 
+      acc <= $signed(acc) + $signed(sum); //32.30
+    end
+  end
+
+  localparam OVF = 2**(SAMPLE_SIZE-1);
+  assign acc_round = acc[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1;
+  assign acc_conv = (acc_round[SAMPLE_SIZE+1 -: 2] == 2'b10) ? OVF   :
+                    (acc_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF-1 :
+                     acc_round[SAMPLE_SIZE:1];
+
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      dout <= 0;
+    end else if (clk_fs_old && clk_fs_new) begin 
+ // end else if (clk_fs_old_d2 && (cnt == M-1) begin 
+      dout <= acc_conv; //32.30
+    end
+  end
+
+  genvar i;
+  generate
+    for(i = 0; i < (M + IS_ODD)/2; i = i + 1) begin
+      if (i == (M+IS_ODD)/2-1 && IS_ODD == 1) begin
+        memory_controller #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem_ctrl (
+          .nrst(nrst),
+          .en(mem_en[i]),
+          .clk(clk),
+          .clk_fs(clk_fs_old),
+          .clk_fs_d0(clk_fs_old_d0),
+          .clk_fs_d1(clk_fs_old_d1),
+          .clk_fs_d2(clk_fs_old_d2),
+          .s_in(din),
+          .s_out(s_out[i]),
+          .c_out(c_out[i]),
+          .c_we(coeff_we[i]),
+          .c_in(c_in),
+          .c_addr(coeff_addr)
+        );
+      end
+      memory_controller_2 #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem_ctrl (
+        .nrst(nrst),
+        .en_0(mem_en[i]),
+        .en_1(mem_en[M-i-1]),
+        .clk(clk),
+        .clk_fs(clk_fs_old),
+        .clk_fs_d0(clk_fs_old_d0),
+        .clk_fs_d1(clk_fs_old_d1),
+        .clk_fs_d2(clk_fs_old_d2),
+        .s_in(din),
+        .s_out_0(s_out[i]),
+        .s_out_1(s_out[M-i-1]),
+        .c_out(c_out[i]),
+        .c_we(coeff_we[i]),
+        .c_in(c_in),
+        .c_addr(coeff_addr)
+      );
+    end
+  endgenerate
+
+  generate
+    for(i = 0; i < MAC_NUM; i = i + 1) begin
+      MAC #(MAC_SIZE, SAMPLE_SIZE, COEFF_SIZE) i_MAC(
+        .clk(clk),
+        .nrst(mac_nrst),
+        .en(mac_en),
+        .c_in(mac_c_in[i]),
+        .s_in(mac_s_in[i]),
+        .dout(mac_dout[i])
+      );
+    end
+  endgenerate
+
+endmodule
