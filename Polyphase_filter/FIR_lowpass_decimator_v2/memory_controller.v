@@ -5,14 +5,12 @@ module memory_controller#(
   parameter SAMPLE_SIZE = 16,
   parameter MAC_NUM = 1
 )(
-  input  wire nrst,
-  input  wire en,
   input  wire clk,
-  input  wire clk_fs,
-  input  wire clk_fs_d0,
-  input  wire clk_fs_d1,
-  input  wire clk_fs_d2,
-
+  input  wire sample_we,
+  input  wire sample_en,
+  input  wire coeff_en,
+  input  wire [$clog2(MAC_SIZE)-1:0] sample_addr,
+  input  wire [$clog2(MAC_SIZE)-1:0] coeff_addr,
   input  wire [SAMPLE_SIZE-1:0] s_in,
 
   input  wire c_we,
@@ -24,72 +22,14 @@ module memory_controller#(
 
 );
 
-  reg  en_pr;
-  wire sample_en;
-  wire coeff_en;
-  wire we;
-
-  reg  [$clog2(MAC_SIZE)-1:0] sample_step_cnt;
-  reg  [$clog2(MAC_SIZE)-1:0] sample_addr_cnt;
-  wire [$clog2(MAC_SIZE)-1:0] sample_addr;
-  reg  [$clog2(MAC_SIZE)-1:0] cnt;
-
   reg  [MAC_NUM-1:0] coeff_we;
   reg  [$clog2(MAC_SIZE)-1:0] coeff_dec_addr;
-  wire [$clog2(MAC_SIZE)-1:0] coeff_addr;
+  wire [$clog2(MAC_SIZE)-1:0] coeff_addr_mod;
   
   wire [SAMPLE_SIZE-1:0] samples [0:MAC_NUM];
   wire [COEFF_SIZE-1:0] coeffs [0:MAC_NUM];
 
-  //counts what address should new sample be written to
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      sample_step_cnt <= 0;
-    end else if (!c_we) begin
-      if (clk_fs && en) begin
-        if (sample_step_cnt == MAC_SIZE-1) sample_step_cnt <= 0;
-        else sample_step_cnt <= sample_step_cnt + 1;
-      end
-    end
-  end
-
-  //counts address of needed sample for mac
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      sample_addr_cnt <= 0;
-    end else if (!c_we) begin
-      if (clk_fs_d1) sample_addr_cnt <= sample_step_cnt;
-      else if (sample_addr_cnt == 0) sample_addr_cnt <= MAC_SIZE-1;
-      else sample_addr_cnt <= sample_addr_cnt - 1;
-    end
-  end
-
-  //counts mac step
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      cnt <= 0;
-    end else if (!c_we) begin
-      if (clk_fs_d1) cnt <= 0;
-      else if (cnt == MAC_SIZE) cnt <= MAC_SIZE;
-      else cnt <= cnt + 1;
-    end
-  end
-
-  always @(posedge clk or negedge nrst) begin
-    if (!nrst) begin
-      en_pr <= 0;
-    end else begin
-      if (cnt == MAC_SIZE-1 || c_we) en_pr <= 0;
-      else if (clk_fs_d1 && en) en_pr <= 1;
-    end
-  end
-
-  assign sample_addr = (clk_fs_d0 || clk_fs_d1) ? sample_step_cnt : sample_addr_cnt;
-  assign coeff_addr = (c_we) ? coeff_dec_addr : cnt;
-  assign sample_en = en_pr || ((clk_fs_d0 || clk_fs_d1) && en);
-  assign coeff_en = en_pr || c_we;
-
-  assign we = clk_fs_d1;
+  assign coeff_addr_mod = (c_we) ? coeff_dec_addr : coeff_addr;
 
   integer j,k;
 
@@ -125,14 +65,14 @@ module memory_controller#(
        .wr_addr(sample_addr),
        .rd_addr(sample_addr),
        .wr_din(samples[i]),
-       .we(we),
+       .we(sample_we),
        .rd_dout(samples[i+1])
      );
      single_port_RAM #(COEFF_SIZE, MAC_SIZE) i_coeff_ram(
        .clk(clk),
        .en(coeff_en),
        .we(coeff_we[i]),
-       .addr(coeff_addr),
+       .addr(coeff_addr_mod),
        .din(c_in),
        .dout(coeffs[i])
      );

@@ -3,7 +3,7 @@
 
 module tb();
 
-  reg clk, clk_fs_new, clk_fs_old, c_we, nrst, check_en, en;
+  reg clk, clk_fs_new, clk_fs_old, c_we, nrst, check_en;
   wire clk_fs_new_div;
   reg [15:0] check;
   wire [15:0] out;
@@ -24,7 +24,6 @@ module tb();
   check_en = 0;
   N = 0;
   K = 0;
-  en = 1;
   err_cnt = 0;
   in = 0;
   clk = 0;
@@ -101,7 +100,6 @@ module tb();
 
   fir_decimator #(ORD,M,D,COEFF_SIZE,SAMPLE_SIZE) i_fir(
     .nrst(nrst),
-    .en(en),
     .clk(clk),
     .din(in),
     .dout(out),

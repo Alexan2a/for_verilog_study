@@ -7,7 +7,6 @@ module fir_decimator#(
   parameter MAC_NUM = 1
 )(
   input  wire nrst,
-  input  wire en,
   input  wire clk,
   input  wire [SAMPLE_SIZE-1:0] din,
   output reg  [SAMPLE_SIZE-1:0] dout,
