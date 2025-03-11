@@ -267,7 +267,7 @@ module fir_decimator#(
   generate
     for(i = 0; i < (M + IS_ODD)/2; i = i + 1) begin
       if (i == (M+IS_ODD)/2-1 && IS_ODD == 1) begin 
-        memory_controller #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem_ctrl (
+        memory_block #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem (
           .clk(clk),
           .sample_we(clk_fs_d1),
           .sample_en(sample_en[i]),
@@ -282,7 +282,7 @@ module fir_decimator#(
           .c_addr(coeff_dec_addr)
         );
       end
-      memory_controller_2 #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem_ctrl_2 (
+      memory_block_2 #(MAC_SIZE, D, COEFF_SIZE, SAMPLE_SIZE, MAC_NUM_FIX) i_mem_2 (
         .clk(clk),
         .sample_we(clk_fs_d1),
         .sample_en_0(sample_en[i]),

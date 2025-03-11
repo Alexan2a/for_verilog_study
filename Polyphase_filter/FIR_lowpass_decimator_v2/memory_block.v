@@ -1,4 +1,4 @@
-module memory_controller#(
+module memory_block#(
   parameter MAC_SIZE = 255, 
   parameter D = 100,
   parameter COEFF_SIZE = 16, 
