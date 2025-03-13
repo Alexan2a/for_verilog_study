@@ -8,6 +8,10 @@ module fir_interpolator#(
 (
   input  wire nrst,
   input  wire clk,
+
+  input  wire valid_in,
+  output reg  valid_out,
+
   input  wire [$clog2(M/2+1)-1:0] div,
   input  wire [SAMPLE_SIZE-1:0] din,
   output reg [SAMPLE_SIZE-1:0] dout,
@@ -32,6 +36,9 @@ module fir_interpolator#(
   reg  clk_fs_new_d1;
   reg  clk_fs_new_d2;
 
+  wire en;
+  reg [SAMPLE_SIZE-1:0] din_reg;
+  reg  valid_in_reg;
   reg  en_pr;
   wire en_pr_a, en_pr_b;
   reg  en_a, en_b;
@@ -74,6 +81,7 @@ module fir_interpolator#(
   wire [SAMPLE_SIZE-1:0] sum_a_conv;
   wire [SAMPLE_SIZE-1:0] sum_b_conv;
   reg  [SAMPLE_SIZE-1:0] phases [0:M/2-1];
+  wire phase_0;
 
   clock_divider #(D) i_clk_div_0(
     .in_clk(clk), 
@@ -81,18 +89,31 @@ module fir_interpolator#(
     .out_clk(clk_fs_new)
   );
 
-  clock_divider #(M) i_clk_div_1(
-    .in_clk(clk_fs_new), 
-    .rst(nrst),
-    .out_clk(clk_fs_old)
-  );
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      valid_in_reg <= 0;
+    end else if (!c_we && clk_fs_new) begin
+      if (phase_step_cnt == M-1) valid_in_reg <= 0;
+      else if (valid_in) valid_in_reg <= 1;
+    end
+  end
+
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      din_reg <= 0;
+    end else if (!c_we && clk_fs_new && valid_in) begin
+      din_reg <= din;
+    end
+  end
+
+  assign en = (phase_step_cnt_d == phase_step_cnt) ? 0 : 1;
 
   //check if memories are empty
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       valid_data_cnt <= 0;
     end else if (!c_we) begin
-      if (clk_fs_old && clk_fs_new_d1) begin
+      if (phase_0 && clk_fs_new_d1) begin
         if (valid_data_cnt == POLY_NUM) valid_data_cnt <= POLY_NUM;
         else valid_data_cnt <= valid_data_cnt + 1;
       end
@@ -107,18 +128,20 @@ module fir_interpolator#(
       phase_step_cnt <= 0;
     end else if (!c_we) begin
       if (clk_fs_new) begin
-        if (phase_step_cnt == M-1 || clk_fs_old) phase_step_cnt <= 0;
+        if ((phase_step_cnt == M-1)) phase_step_cnt <= (valid_in || valid_in_reg) ? 0 : M-1;
         else phase_step_cnt <= phase_step_cnt + 1;
       end
     end
   end
 
+  assign phase_0 = (phase_step_cnt == 0) ? 1 : 0;
+
   //counts what address should new sample be written to
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       poly_step_cnt <= 0;
-    end else if (!c_we) begin
-      if (clk_fs_new && clk_fs_old) begin
+    end else if (!c_we && en) begin
+      if (clk_fs_new && (phase_step_cnt == M-1)) begin
         if (poly_step_cnt == MAC_POLY_NUM-1) poly_step_cnt <= 0;
         else poly_step_cnt <= poly_step_cnt + 1;
       end
@@ -129,7 +152,7 @@ module fir_interpolator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       poly_addr_cnt <= 0;
-    end else if (!c_we) begin
+    end else if (!c_we && en) begin
       if (clk_fs_new_d1) poly_addr_cnt <= poly_step_cnt;
       else if (poly_addr_cnt == 0) poly_addr_cnt <= MAC_POLY_NUM-1;
       else poly_addr_cnt <= poly_addr_cnt - 1;
@@ -140,7 +163,7 @@ module fir_interpolator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       poly_rev_addr_cnt <= MAC_POLY_NUM-1;
-    end else if (!c_we) begin
+    end else if (!c_we && en) begin
       if (clk_fs_new_d1) poly_rev_addr_cnt <= (poly_step_cnt == MAC_POLY_NUM-1) ? 0 : poly_step_cnt+1;
       else if (poly_rev_addr_cnt == MAC_POLY_NUM-1) poly_rev_addr_cnt <= 0;
       else poly_rev_addr_cnt <= poly_rev_addr_cnt + 1;
@@ -151,7 +174,7 @@ module fir_interpolator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       cnt <= 0;
-    end else if (!c_we) begin
+    end else if (!c_we && en) begin
       if (clk_fs_new_d1) cnt <= 0;
       else if (cnt == MAC_POLY_NUM) cnt <= MAC_POLY_NUM;
       else cnt <= cnt + 1;
@@ -163,7 +186,7 @@ module fir_interpolator#(
       div_phase_cnt <= 0;
     end else if (!c_we) begin
       if (clk_fs_new) begin
-        if (div_phase_cnt == div-1 || clk_fs_old) div_phase_cnt <= 0;
+        if (div_phase_cnt == div-1 || phase_step_cnt == M-1) div_phase_cnt <= 0;
         else div_phase_cnt <= div_phase_cnt + 1;
       end
     end
@@ -189,17 +212,17 @@ module fir_interpolator#(
     end
   end
 
-  assign poly_addr = (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
+  assign poly_addr = (phase_0 && (clk_fs_new_d0 || clk_fs_new_d1)) ? poly_step_cnt : poly_addr_cnt;
 
   assign en_pr_a = (div_phase_cnt == 0) && en_pr;
   assign en_pr_b = (div_phase_cnt == div-1) && en_pr;
 
-  assign sample_mem_en = en_pr_a || (clk_fs_old && (clk_fs_new_d0 || clk_fs_new_d1));
+  assign sample_mem_en = en_pr_a || (phase_0&& (clk_fs_new_d0 || clk_fs_new_d1));
   assign coeff_mem_en = en_pr_a || en_pr_b;
 
   assign clk_div_out = (div_phase_cnt == 1 || div == 1) && clk_fs_new_d1;
 
-  assign we = clk_fs_new_d1 && clk_fs_old;
+  assign we = clk_fs_new_d1 && phase_0;
   assign acc_nrst = nrst && !clk_fs_new_d2;
 
   integer j,k;
@@ -283,7 +306,7 @@ module fir_interpolator#(
 
   always @(posedge clk or negedge nrst) begin
       if (!nrst) begin
-        for (j = 0; j < M/2; j = j+1) begin //maybe should remove this nrst, I don't know if it has sense
+        for (j = 0; j < M/2; j = j+1) begin
           phases[j] <= 0;
         end
       end else if (!c_we && valid_data) begin
@@ -299,17 +322,25 @@ module fir_interpolator#(
     end
   
   always @(posedge clk or negedge nrst) begin
-      if (!nrst) begin
-        dout <= 0;
-      end else if (valid_data) begin
-        if (clk_div_out) begin
-           if (phase_step_cnt_d >= (M+1)/2) dout <= phases[phase_step_cnt_d-(M+1)/2];
-           else dout <= sum_a_conv;
-        end
+    if (!nrst) begin
+      dout <= 0;
+    end else if (valid_data) begin
+      if (clk_div_out) begin
+         if (phase_step_cnt_d >= (M+1)/2) dout <= phases[phase_step_cnt_d-(M+1)/2];
+         else dout <= sum_a_conv;
       end
     end
+  end
 
-  assign samples[0] = din;
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      valid_out <= 0;
+    end else if (!c_we && valid_data && clk_fs_new_d1) begin
+         valid_out <= (en && clk_div_out) ? 1 : 0;
+    end
+  end
+
+  assign samples[0] = din_reg;
   
   genvar i;
   generate

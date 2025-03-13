@@ -8,6 +8,10 @@ module fir_decimator#(
 )(
   input  wire nrst,
   input  wire clk,
+
+  input  wire valid_in,
+  output reg  valid_out,
+  
   input  wire [SAMPLE_SIZE-1:0] din,
   output reg  [SAMPLE_SIZE-1:0] dout,
 
@@ -27,18 +31,28 @@ module fir_decimator#(
   reg clk_fs_d1;
   reg clk_fs_d2;
 
+  reg  [$clog2(ORD+2)-1:0] valid_data_cnt;
+  wire valid_data;
+
+  reg  valid_in_reg;
+  reg  valid_in_reg_del;
+  reg  [SAMPLE_SIZE-1:0] din_reg;
+
   reg  [$clog2(M)-1:0] cnt;
   reg  [$clog2(M)-1:0] cnt_d;
-  reg  [$clog2(MAC_SIZE+1)-1:0] en_cnt;
+
+  reg  [M-1:0] coeff_we;
+  reg  [M-1:0] ch_mem_en;
+  reg  [$clog2(POLY_NUM)-1:0] coeff_dec_addr;
   wire [$clog2(MAC_SIZE)-1:0] coeff_addr;
   wire [$clog2(MAC_SIZE)-1:0] coeff_addr_rev; 
-  reg  [M-1:0] mem_en;
-  reg   en;
+
+  wire  en;
+  reg   mem_en;
   reg   mac_en;
   wire [M-1:0] sample_en;
   reg  [(M+IS_ODD)/2-1:0] coeff_en;
-  reg  [$clog2(POLY_NUM)-1:0] coeff_dec_addr;
-  reg  [M-1:0] coeff_we;
+  reg  [$clog2(MAC_SIZE+1)-1:0] mem_en_cnt;
 
   reg  [SAMPLE_SIZE-1:0] mac_s_in [0:MAC_NUM-1];
   reg  [COEFF_SIZE-1:0]  mac_c_in [0:MAC_NUM-1];
@@ -52,9 +66,6 @@ module fir_decimator#(
   wire [SAMPLE_SIZE+1:0] acc_round;
   wire [SAMPLE_SIZE-1:0] acc_conv;
 
-  reg  [$clog2(ORD+2)-1:0] valid_data_cnt;
-  wire valid_data;
-
   clock_divider #(D) i_clk_div_0(
     .in_clk(clk), 
     .rst(nrst),
@@ -67,11 +78,21 @@ module fir_decimator#(
     clk_fs_d2 <= clk_fs_d1;
   end
 
+  always @(posedge clk) begin
+    if (clk_fs) begin
+      valid_in_reg <= valid_in;
+      valid_in_reg_del <= valid_in_reg;
+      din_reg <= din;
+    end
+  end
+
+  assign en = !c_we && valid_in_reg;
+
   //check if memories are empty
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       valid_data_cnt <= 0;
-    end else if (!c_we) begin
+    end else if (en) begin
       if (clk_fs_d1) begin
         if (valid_data_cnt == ORD+1) valid_data_cnt <= ORD+1;
         else valid_data_cnt <= valid_data_cnt + 1;
@@ -102,15 +123,11 @@ module fir_decimator#(
     end
   end
 
-  always @(posedge clk) begin
-    cnt_d <= cnt;
-  end
-
   //counts step of 'fir'
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       cnt <= 0;
-    end else if (!c_we) begin
+    end else if (!c_we && valid_in) begin
       if (clk_fs) begin
         if (cnt == 0) cnt <= M-1;
         else cnt <= cnt - 1;
@@ -118,14 +135,18 @@ module fir_decimator#(
     end
   end
 
+  always @(posedge clk) begin
+    cnt_d <= cnt;
+  end
+
   //enable memories according to cnt
   always @(*) begin
     if (c_we) begin
-      mem_en = coeff_we;
+      ch_mem_en = coeff_we;
     end else begin
-      mem_en = 0;
+      ch_mem_en = 0;
       for (j = 0; j < M; j = j+1) begin
-        if (cnt == j) mem_en = 1 << j;
+        if (cnt == j) ch_mem_en = 1 << j;
       end
     end
   end
@@ -136,29 +157,29 @@ module fir_decimator#(
   //counts mac step
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      en_cnt <= 0;
-    end else if (!c_we) begin
-      if (clk_fs_d1) en_cnt <= 0;
-      else if (en_cnt == MAC_SIZE) en_cnt <= MAC_SIZE;
-      else en_cnt <= en_cnt + 1;
+      mem_en_cnt <= 0;
+    end else if (en) begin
+      if (clk_fs_d1) mem_en_cnt <= 0;
+      else if (mem_en_cnt == MAC_SIZE) mem_en_cnt <= MAC_SIZE;
+      else mem_en_cnt <= mem_en_cnt + 1;
     end
   end
 
 
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      en <= 0;
+      mem_en <= 0;
     end else begin
-      if (en_cnt == MAC_SIZE-1 || c_we) en  <= 0;
-      else if (clk_fs_d1) en <= 1;
+      if (mem_en_cnt == MAC_SIZE-1 || c_we) mem_en  <= 0;
+      else if (clk_fs_d1 && valid_in_reg) mem_en <= 1;
     end
   end
 
-  assign sample_en = (c_we || ((cnt == MAC_SIZE) && !(clk_fs || clk_fs_d0))) ? 0 : mem_en;
+  assign sample_en = (!en || ((cnt == MAC_SIZE) && !(clk_fs || clk_fs_d0))) ? 0 : ch_mem_en;
 
   always @(*) begin
     for (j = 0; j < (M+IS_ODD)/2; j = j+1) begin
-      coeff_en[j] = (mem_en[j] || mem_en [M-j-1]) && (en || c_we);
+      coeff_en[j] = (ch_mem_en[j] || ch_mem_en [M-j-1]) && (mem_en || c_we);
     end
   end
 
@@ -170,7 +191,7 @@ module fir_decimator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       sample_step_cnt <= 0;
-    end else if (!c_we) begin
+    end else if (!c_we && valid_in) begin
       if (clk_fs && (cnt == 0)) begin
         if (sample_step_cnt == MAC_SIZE-1) sample_step_cnt <= 0;
         else sample_step_cnt <= sample_step_cnt + 1;
@@ -182,7 +203,7 @@ module fir_decimator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       sample_addr_cnt <= 0;
-    end else if (!c_we) begin
+    end else if (!c_we && valid_in_reg) begin
       if (clk_fs_d1) sample_addr_cnt <= sample_step_cnt;
       else if (sample_addr_cnt == 0) sample_addr_cnt <= MAC_SIZE-1;
       else sample_addr_cnt <= sample_addr_cnt - 1;
@@ -196,12 +217,11 @@ module fir_decimator#(
 
   //enable mac accumulator
   always @(posedge clk) begin
-    mac_en <= en;
+    mac_en <= mem_en;
   end
 
   //mac input mux
   always @(*) begin
-  
     for (k = 0; k < MAC_NUM; k = k+1) begin
       mac_c_in[k] = 0;
       mac_s_in[k] = 0;
@@ -234,13 +254,13 @@ module fir_decimator#(
 
   //resets
   wire acc_nrst;
-  assign acc_nrst = nrst && !((cnt == M-1) && clk_fs);
+  assign acc_nrst = nrst && !((cnt == M-1) && clk_fs && valid_in_reg);
 
   //accumulate outputs of phases
   always @(posedge clk or negedge acc_nrst) begin
     if (!acc_nrst) begin
       acc <= 0;
-    end else if (!c_we && clk_fs_d1) begin 
+    end else if ((!c_we || valid_in_reg_del) && clk_fs_d1) begin 
       acc <= $signed(acc) + $signed(sum); //32.30
     end
   end
@@ -255,12 +275,20 @@ module fir_decimator#(
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       dout <= 0;
-    end else if (clk_fs_d2 && (cnt == M-1)) begin 
+    end else if (clk_fs_d2 && (cnt == M-1) && valid_in_reg) begin 
       dout <= acc_conv; //32.30
     end
   end
 
-  assign coeff_addr = en_cnt[$clog2(MAC_SIZE)-1:0];
+  always @(posedge clk or negedge nrst) begin
+    if (!nrst) begin
+      valid_out <= 0;
+    end else if (clk_fs_d2) begin 
+      valid_out <= (cnt == M-1) ? valid_in_reg : 0;
+    end
+  end
+
+  assign coeff_addr = mem_en_cnt[$clog2(MAC_SIZE)-1:0];
   assign coeff_addr_rev = MAC_SIZE-1-coeff_addr;
       
   genvar i;
@@ -274,7 +302,7 @@ module fir_decimator#(
           .sample_addr(sample_addr),
           .coeff_en(coeff_en[i]),
           .coeff_addr(coeff_addr),
-          .s_in(din),
+          .s_in(din_reg),
           .s_out(s_out[i]),
           .c_out(c_out[i]),
           .c_we(coeff_we[i]),
@@ -290,7 +318,7 @@ module fir_decimator#(
         .sample_addr(sample_addr),
         .coeff_en(coeff_en[i]),
         .coeff_addr(sample_en[i] ? coeff_addr : coeff_addr_rev),
-        .s_in(din),
+        .s_in(din_reg),
         .s_out_0(s_out[i]),
         .s_out_1(s_out[M-i-1]),
         .c_out(c_out[i]),
