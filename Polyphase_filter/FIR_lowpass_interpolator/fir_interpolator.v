@@ -89,6 +89,7 @@ module fir_interpolator#(
     .out_clk(clk_fs_new)
   );
 
+  //holds valid_in value
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       valid_in_reg <= 0;
@@ -98,6 +99,7 @@ module fir_interpolator#(
     end
   end
 
+  //holds input
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       din_reg <= 0;
@@ -181,6 +183,7 @@ module fir_interpolator#(
     end
   end
 
+  //counts phases according to div input
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       div_phase_cnt <= 0;
@@ -304,6 +307,7 @@ module fir_interpolator#(
     end
   end
 
+  //load to second half phases reg
   always @(posedge clk or negedge nrst) begin
       if (!nrst) begin
         for (j = 0; j < M/2; j = j+1) begin

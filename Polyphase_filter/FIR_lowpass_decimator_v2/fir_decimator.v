@@ -214,6 +214,8 @@ module fir_decimator#(
   end
 
   assign sample_addr = (clk_fs_d0 || clk_fs_d1) ? sample_step_cnt : sample_addr_cnt;
+  assign coeff_addr = mem_en_cnt[$clog2(MAC_SIZE)-1:0];
+  assign coeff_addr_rev = MAC_SIZE-1-coeff_addr;
 
 /////////////////////////////////////////////
 // MAC SIGNALS
@@ -268,6 +270,7 @@ module fir_decimator#(
     end
   end
 
+  //round
   localparam OVF = 2**(SAMPLE_SIZE-1);
   assign acc_round = acc[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1;
   assign acc_conv = (acc_round[SAMPLE_SIZE+1 -: 2] == 2'b10) ? OVF   :
@@ -279,7 +282,7 @@ module fir_decimator#(
     if (!nrst) begin
       dout <= 0;
     end else if (clk_fs_d2 && (cnt == M-1) && valid_in_reg) begin 
-      dout <= acc_conv; //32.30
+      dout <= acc_conv;
     end
   end
 
@@ -290,9 +293,6 @@ module fir_decimator#(
       valid_out <= (cnt == M-1 && valid_data_reg) ? valid_in_reg : 0;
     end
   end
-
-  assign coeff_addr = mem_en_cnt[$clog2(MAC_SIZE)-1:0];
-  assign coeff_addr_rev = MAC_SIZE-1-coeff_addr;
       
   genvar i;
   generate
