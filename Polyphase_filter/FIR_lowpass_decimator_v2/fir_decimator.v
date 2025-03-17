@@ -31,8 +31,10 @@ module fir_decimator#(
   reg clk_fs_d1;
   reg clk_fs_d2;
 
-  reg  [$clog2(ORD+2)-1:0] valid_data_cnt;
+  reg  [$clog2(ORD+3)-1:0] valid_data_cnt;
   wire valid_data;
+  reg  valid_data_reg;
+
 
   reg  valid_in_reg;
   reg  valid_in_reg_del;
@@ -82,6 +84,7 @@ module fir_decimator#(
     if (clk_fs) begin
       valid_in_reg <= valid_in;
       valid_in_reg_del <= valid_in_reg;
+      valid_data_reg <= valid_data;
       din_reg <= din;
     end
   end
@@ -94,13 +97,13 @@ module fir_decimator#(
       valid_data_cnt <= 0;
     end else if (en) begin
       if (clk_fs_d1) begin
-        if (valid_data_cnt == ORD+1) valid_data_cnt <= ORD+1;
+        if (valid_data_cnt == ORD+2) valid_data_cnt <= ORD+2;
         else valid_data_cnt <= valid_data_cnt + 1;
       end
     end
   end
 
-  assign valid_data = (valid_data_cnt == ORD+1) ? 1 : 0;
+  assign valid_data = (valid_data_cnt == ORD+2) ? 1 : 0;
 
   integer j,k;
 
@@ -284,7 +287,7 @@ module fir_decimator#(
     if (!nrst) begin
       valid_out <= 0;
     end else if (clk_fs_d2) begin 
-      valid_out <= (cnt == M-1) ? valid_in_reg : 0;
+      valid_out <= (cnt == M-1 && valid_data_reg) ? valid_in_reg : 0;
     end
   end
 
