@@ -3,7 +3,7 @@
 
 module tb();
 
-  reg clk, clk_fs_new, clk_fs_old, c_we, nrst, check_en;
+  reg clk, clk_fs_new, clk_fs_old, c_we, nrst, check_en, valid;
   reg [15:0] check;
   wire [15:0] out;
   
@@ -25,7 +25,17 @@ module tb();
   c_we = 1;
   nrst = 0;
   #5 nrst = 1;
-  #257025 check_en = 1;
+  #258025 check_en = 1;
+  end
+
+  initial begin
+  valid = 1;
+  #288000 valid = 0;
+  #1000 valid = 1;
+  #1000 valid = 0;
+  #3000 valid = 1;
+  #1000 valid = 0;
+  #13000 valid = 1;
   end
 
   always #5 clk = !clk;
@@ -67,33 +77,35 @@ module tb();
   initial
     begin: file_IO_block
       FILE_1 = $fopen("Data_out.txt", "w");
-      #530000 $fclose(FILE_1);
+      #1200000 $fclose(FILE_1);
     end
-
+  wire valid_out;
   always @(posedge clk_fs_new)
     begin: write_block
-      $fdisplay(FILE_1, "0b%bs16", out);
+      if(valid_out) $fdisplay(FILE_1, "0b%bs16", out);
     end
 
   always @(posedge clk_fs_new) begin
     if (check_en) begin
       check = ((($signed(-coeffs_array_0[K])*M )>>> 2) + 1) >>> 1;
       if (out != check) begin
-	err_cnt = err_cnt + 1;
+	      err_cnt = err_cnt + 1;
         $error("out: expected = %h, real = %h",check, out);
       end
-      K = K + 1;
+      if (valid_out) K = K + 1;
     end
   end
 
   initial begin
-    #530000 $display("Output errors: %d", err_cnt);
+    #400000 $display("Output errors: %d", err_cnt);
     $stop();
   end
-  wire [2:0] div = 2;
+  wire [2:0] div = 1;
   fir_interpolator #(ORD,M,D,COEFF_SIZE,SAMPLE_SIZE) i_fir(
     .nrst(nrst),
     .clk(clk),
+    .valid_in(valid),
+    .valid_out(valid_out),
     .div(div),
     .din(in),
     .dout(out),
