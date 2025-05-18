@@ -9,8 +9,7 @@ module LMS_filter #(
   input wire clk,
   input wire mode,
 
-  input  wire valid_d_in,
-  input  wire valid_u_in,
+  input  wire valid_in,
   output reg  valid_out,
 
   input  wire [MU_SIZE-1:0] mu_in,
@@ -69,7 +68,7 @@ module LMS_filter #(
       u <= u_in;
       d <= d_in;
       mu <= mu_hold;
-      valid <= valid_d_in && valid_u_in;
+      valid <= valid_in;
     end
   end
 
