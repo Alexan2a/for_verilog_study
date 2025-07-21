@@ -31,7 +31,6 @@ module fir_interpolator#(
   localparam GND = 0;
 
   wire clk_fs_new;
-  wire clk_fs_old;
   reg  clk_fs_new_d0;
   reg  clk_fs_new_d1;
   reg  clk_fs_new_d2;

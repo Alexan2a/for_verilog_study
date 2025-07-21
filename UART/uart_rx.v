@@ -1,22 +1,26 @@
-module uart_rx (input wire rx, clk, rst,
-                output wire [7:0] rx_data,
-                output reg rx_ready);
+module uart_rx (
+  input wire rx, clk, rst,
+  output wire [7:0] rx_data,
+  output reg rx_ready
+);
 
-  reg [3:0] counter;
-  reg [9:0] rx_shift;
-  reg [7:0] rx_reg;
-  reg       rx_delayed;
-  reg       rx_en;
-  reg       rx_d;
-  reg       rx_start;
-  reg       rx_busy;
-  reg       clk_rst;
+  reg [3:0]  counter;
+  reg [9:0]  rx_shift;
+  reg [7:0]  rx_reg;
+  reg        rx_delayed;
+  reg        rx_en;
+  reg        rx_d;
+  reg        rx_start;
+  reg        rx_busy;
+  reg        clk_rst;
   reg [13:0] div868;
 
-  clock_divider div(.rst(clk_rst),
-                    .coef(div868),
-                    .in_clk(clk),
-                    .out_clk(clk1));
+  clock_divider div(
+    .rst(clk_rst),
+    .coef(div868),
+    .in_clk(clk),
+    .out_clk(clk1)
+  );
 
   always @(posedge clk or negedge rst) begin
     if (!rst) begin

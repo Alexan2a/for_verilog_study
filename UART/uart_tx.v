@@ -1,6 +1,8 @@
-module uart_tx (input wire rst, clk, tx_valid,
-                input wire [7:0] tx_data,
-	        output reg tx, tx_ready);
+module uart_tx (
+  input wire rst, clk, tx_valid,
+  input wire [7:0] tx_data,
+	output reg tx, tx_ready
+);
 
   wire       clk1;
   reg        tx_shift_en;
@@ -9,10 +11,12 @@ module uart_tx (input wire rst, clk, tx_valid,
   reg [9:0]  tx_shift;
   reg [13:0] div868;
 
-  clock_divider div(.rst(rst),
-                    .coef(div868),
-                    .in_clk(clk),
-                    .out_clk(clk1));
+  clock_divider div (
+    .rst(rst),
+    .coef(div868),
+    .in_clk(clk),
+    .out_clk(clk1)
+  );
 
   always @(posedge clk1 or negedge rst) begin
 
