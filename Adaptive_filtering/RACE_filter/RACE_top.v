@@ -42,13 +42,14 @@ module RACE_top #(
       en <= (sel_cnt == 2*L+1) ? 1'b0 : 1'b1;
     end
   end
+  
   //agc_en activates on negedge of en (same time mac data is ready)
   always @(posedge clk) begin
     en_del <= en;
     agc_en <= !en & en_del;
   end
 
-  //just for selection of input taps, counts from 0 to 2*L+1
+ //just for selection of input taps, counts from 0 to 2*L+1
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       sel_cnt <= 0;
@@ -70,7 +71,7 @@ module RACE_top #(
   end
   
   assign strobe_resync = q1 & !q2;
-  
+
   //count average from imaginary and real rxx to use as coeffitients)))
   assign rxx = $signed($signed(rxx_real) + $signed(rxx_imag) + 16'd1) >>> 1;
   

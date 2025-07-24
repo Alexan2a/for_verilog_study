@@ -42,7 +42,7 @@ module exp_smoothing_filter #(
 
   //just previous rxx taps, cycled update for each
   //like    <-- [ rxx1(n-1) rxx2(n-1) ... rxx15(n-1) ] <-- rxx1(n)
-  //        <-- [ rxx2(n-1) rxx3(n-1) ... rxx1(n) ]   <-- rxx2(n)
+  //        <-- [ rxx2(n-1) rxx3(n-1) ... rxx1(n) ]    <-- rxx2(n)
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       for(i = 0; i < 2*L+1; i = i + 1) begin

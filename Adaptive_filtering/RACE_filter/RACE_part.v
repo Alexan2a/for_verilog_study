@@ -21,7 +21,7 @@ module RACE_part #(
   reg  [SAMPLE_SIZE-1:0] mux_x_del;
 
   wire [SAMPLE_SIZE*2-1:0] rxx_filt_in;
-  reg  [SAMPLE_SIZE+1:0] rxx_filt_in_rnd;
+  reg  [SAMPLE_SIZE:0] rxx_filt_in_rnd;
 
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mac_out;
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mac_out_round;
@@ -64,14 +64,14 @@ module RACE_part #(
     .A14(x_buf[14]),
     .B(mux_x)
   );
-  
+
   assign rxx_filt_in = $signed(x_buf[L]) * $signed(mux_x);
   
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
       rxx_filt_in_rnd <= 0;
     end else begin
-      rxx_filt_in_rnd <= rxx_filt_in[SAMPLE_SIZE*2-1 -: SAMPLE_SIZE+2] + 1;
+      rxx_filt_in_rnd <= $signed(rxx_filt_in[SAMPLE_SIZE*2-1 -: SAMPLE_SIZE+2] + 1) >>> 1;
     end
   end
   
@@ -79,7 +79,7 @@ module RACE_part #(
     .clk(clk),
     .nrst(nrst),
     .en(en),
-    .in(rxx_filt_in_rnd[SAMPLE_SIZE+1:1]),
+    .in(rxx_filt_in_rnd),
     .out(out_rxx)
   );
   

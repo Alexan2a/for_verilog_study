@@ -9,7 +9,7 @@ module AGC #(
   output wire [16:0] out_real,
   output wire [16:0] out_imag
 );
-  
+
   wire [15:0] R = 16'd6553;
 
   reg en_del;
@@ -58,7 +58,6 @@ module AGC #(
   always @(posedge clk) begin
     en_del <= en;
     gain_en <= en_del;
-    gain_en <= en_del;
   end
   
   assign sum = $signed({R[15],R}) - $signed(max_out);
@@ -72,7 +71,6 @@ module AGC #(
     end else if (gain_en) begin
       curr_gain <= next_gain ;    
     end
-
   end
    
 endmodule
