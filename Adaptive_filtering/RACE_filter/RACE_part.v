@@ -1,30 +1,39 @@
 module RACE_part #(
   parameter L = 7,
-  parameter ALPHA_SHIFT = 4,
   parameter BETA_SHIFT = 4,
-  parameter SAMPLE_SIZE = 16,
-  parameter COEFF_SIZE = 16
+  parameter IN_SIZE = 16,
+  parameter OUT_SIZE = 16,
+  parameter COEFF_WH = 20,
+  parameter COEFF_FR = 19,
+  parameter EXP_IN_WH = 32,
+  parameter EXP_IN_FR = 30,
+  parameter EXP_VAL_WH = 32,
+  parameter EXP_VAL_FR = 30
 )(
   input  wire clk,
-  input  wire clk_div,
+  input  wire strobe_resync,
   input  wire nrst,
   input  wire en,
+  input  wire acc_en,
+  input  wire acc_rst,
   input  wire [$clog2(2*L+1)-1:0] sel,
-  input  wire [SAMPLE_SIZE-1:0] in,
-  input  wire [COEFF_SIZE -1:0] in_rxx,
-  output wire [SAMPLE_SIZE  :0] out,
-  output wire [COEFF_SIZE -1:0] out_rxx
+  input  wire [IN_SIZE-1:0] in,
+  input  wire [COEFF_WH -1:0] in_rxx,
+  output wire [OUT_SIZE-1:0] out,
+  output wire [COEFF_WH-1:0] out_rxx
 );
 
-  reg  [SAMPLE_SIZE-1:0] x_buf [0:2*L];
-  wire [SAMPLE_SIZE-1:0] mux_x;
-  reg  [SAMPLE_SIZE-1:0] mux_x_del;
+  reg  [IN_SIZE-1:0] x_buf [0:2*L];
+  wire [IN_SIZE-1:0] mux_x;
+  reg  [IN_SIZE-1:0] mux_del_0, mux_del_1;
 
-  wire [SAMPLE_SIZE*2-1:0] rxx_filt_in;
-  reg  [SAMPLE_SIZE:0] rxx_filt_in_rnd;
+  reg  [IN_SIZE*2-1:0] rxx_filt_in;
 
-  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mac_out;
-  wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mac_out_round;
+  wire [EXP_VAL_WH-1:0] exp_out_rxx;
+  wire [COEFF_WH+1:0] exp_out_rxx_rnd;
+
+  wire [IN_SIZE+COEFF_WH-1:0] mac_out;
+  wire [OUT_SIZE:0] mac_out_round;
   
   // input taps
   integer i;
@@ -33,68 +42,56 @@ module RACE_part #(
       for(i = 0; i < 2*L+1; i = i + 1) begin
         x_buf[i] <= 0;
       end
-    end else if (clk_div) begin
+    end else if (strobe_resync) begin
       for(i = 0; i < 2*L; i = i + 1) begin
         x_buf[i+1] <= x_buf[i];
       end
       x_buf[0] <= in;
     end
-  end
+  end 
 
+
+  assign mux_x = (sel == 2*L+1) ? 16'd0 : x_buf[sel];
   always @(posedge clk) begin
-     mux_x_del <= mux_x;
+     mux_del_0 <= mux_x;
+     mux_del_1 <= mux_del_0;
   end
 
-  mux_15_to_1 #(SAMPLE_SIZE) i_mux(
-    .Sel(sel),
-    .A0(x_buf[0]),
-    .A1(x_buf[1]),
-    .A2(x_buf[2]),
-    .A3(x_buf[3]),
-    .A4(x_buf[4]),
-    .A5(x_buf[5]),
-    .A6(x_buf[6]),
-    .A7(x_buf[7]),
-    .A8(x_buf[8]),
-    .A9(x_buf[9]),
-    .A10(x_buf[10]),
-    .A11(x_buf[11]),
-    .A12(x_buf[12]),
-    .A13(x_buf[13]),
-    .A14(x_buf[14]),
-    .B(mux_x)
-  );
-
-  assign rxx_filt_in = $signed(x_buf[L]) * $signed(mux_x);
-  
   always @(posedge clk or negedge nrst) begin
     if (!nrst) begin
-      rxx_filt_in_rnd <= 0;
+      rxx_filt_in <= 0;
     end else begin
-      rxx_filt_in_rnd <= $signed(rxx_filt_in[SAMPLE_SIZE*2-1 -: SAMPLE_SIZE+2] + 1) >>> 1;
+      rxx_filt_in <= $signed(x_buf[L]) * $signed(mux_x);
     end
   end
-  
-  exp_smoothing_filter #(L, SAMPLE_SIZE+1, COEFF_SIZE, BETA_SHIFT) i_rxx_filt(
+
+  exp_smoothing_filter #(L, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR, BETA_SHIFT) i_rxx_filt(
     .clk(clk),
     .nrst(nrst),
     .en(en),
-    .in(rxx_filt_in_rnd),
-    .out(out_rxx)
+    .in(rxx_filt_in),
+    .out(exp_out_rxx)
   );
-  
-  MAC #(SAMPLE_SIZE, COEFF_SIZE) i_mac(
+
+  MAC #(IN_SIZE, COEFF_WH) i_mac(
     .clk(clk),
-    .en(en),
-    .nrst(!clk_div && nrst),
+    .en(acc_en),
+    .nrst(nrst),
+    .acc_rst(acc_rst),
     .c_in(in_rxx),
-    .s_in(mux_x_del),
+    .s_in(mux_del_1),
     .dout(mac_out)
   );
   
   //round...
-  assign mac_out_round = mac_out[SAMPLE_SIZE+COEFF_SIZE-1 -: SAMPLE_SIZE+2] + 1;
-  assign out = mac_out_round[SAMPLE_SIZE+1:1];
+  assign mac_out_round = mac_out[IN_SIZE+COEFF_WH-1 -: OUT_SIZE+1] + 1;
+  assign out = mac_out_round[OUT_SIZE:1];
   
+  localparam OVF = 2**(COEFF_WH-1);
+  
+  assign exp_out_rxx_rnd = exp_out_rxx[EXP_VAL_WH-1 -: COEFF_WH+2] + 1;
+  assign out_rxx = (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b10) ? OVF   :
+                   (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b01) ? OVF-1 :
+                    exp_out_rxx_rnd[COEFF_WH:1]; 
 
 endmodule

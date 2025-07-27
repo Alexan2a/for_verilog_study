@@ -5,7 +5,7 @@ module tb();
 
   wire[15:0] out_real, out_imag;
   reg clk, nrst;
-  reg valid;
+  reg valid_in;
   reg [15:0] x_real, x_imag;
   wire valid_out;
   wire strobe;
@@ -18,7 +18,7 @@ module tb();
 
   integer FILE_1, FILE_2;
 
- initial
+  initial
     begin: read_block_real
       $readmemb("PATH_TO_FILE/Data_in_real.txt", x_vect_real); //paste your pass to file
     end
@@ -43,35 +43,38 @@ module tb();
      clk = 1'b1;
      N = 0;
      nrst = 1'b1;
-     valid = 1;
+     valid_in = 1;
      x_real = 0;
      x_imag = 0;
+     valid_in = 1;
   #5 nrst = 1'b0;
   #5 nrst = 1'b1;
-  #65000 valid = 0;
-  #5000 valid = 1;
+  #5980 valid_in = 0;
+  #200 valid_in = 1;
   end
 
   always #5 clk = ~clk;
 
   always @(posedge strobe) begin
+    if (valid_in) begin
       N <= N + 1;
       x_real <= x_vect_real[N];
       x_imag <= x_vect_imag[N];
+    end
   end
 
   always @(posedge strobe)
     begin: write_block1
-      //begin
+      if (valid_out) begin
         $fdisplay(FILE_1, "0b%bs16", out_real);
-     // end
+      end
     end
 
   always @(posedge strobe)
     begin: write_block2
-     // if (valid_out) begin
+      if (valid_out) begin
         $fdisplay(FILE_2, "0b%bs16", out_imag);
-     // end
+      end
     end
 
   clock_divider #(20) i_clk_div(
@@ -84,6 +87,8 @@ module tb();
     .nrst(nrst),
     .clk(clk),
     .strobe(strobe),
+    .valid_in(valid_in),
+    .valid_out(valid_out),
     .in_real(x_real),
     .in_imag(x_imag),
     .out_real(out_real),
