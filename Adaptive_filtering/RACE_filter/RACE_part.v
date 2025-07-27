@@ -1,8 +1,7 @@
 module RACE_part #(
   parameter L = 7,
   parameter BETA_SHIFT = 4,
-  parameter IN_SIZE = 16,
-  parameter OUT_SIZE = 16,
+  parameter SAMPLE_SIZE = 16,
   parameter COEFF_WH = 20,
   parameter COEFF_FR = 19,
   parameter EXP_IN_WH = 32,
@@ -13,27 +12,28 @@ module RACE_part #(
   input  wire clk,
   input  wire strobe_resync,
   input  wire nrst,
+  input  wire valid_in,
   input  wire en,
   input  wire acc_en,
   input  wire acc_rst,
   input  wire [$clog2(2*L+1)-1:0] sel,
-  input  wire [IN_SIZE-1:0] in,
+  input  wire [SAMPLE_SIZE-1:0] in,
   input  wire [COEFF_WH -1:0] in_rxx,
-  output wire [OUT_SIZE-1:0] out,
+  output wire [SAMPLE_SIZE-1:0] out,
   output wire [COEFF_WH-1:0] out_rxx
 );
 
-  reg  [IN_SIZE-1:0] x_buf [0:2*L];
-  wire [IN_SIZE-1:0] mux_x;
-  reg  [IN_SIZE-1:0] mux_del_0, mux_del_1;
+  reg  [SAMPLE_SIZE-1:0] x_buf [0:2*L];
+  wire [SAMPLE_SIZE-1:0] mux_x;
+  reg  [SAMPLE_SIZE-1:0] mux_del_0, mux_del_1;
 
-  reg  [IN_SIZE*2-1:0] rxx_filt_in;
+  reg  [SAMPLE_SIZE*2-1:0] rxx_filt_in;
 
   wire [EXP_VAL_WH-1:0] exp_out_rxx;
   wire [COEFF_WH+1:0] exp_out_rxx_rnd;
 
-  wire [IN_SIZE+COEFF_WH-1:0] mac_out;
-  wire [OUT_SIZE:0] mac_out_round;
+  wire [SAMPLE_SIZE+COEFF_WH-1:0] mac_out;
+  wire [SAMPLE_SIZE+1:0] mac_out_round;
   
   // input taps
   integer i;
@@ -42,7 +42,7 @@ module RACE_part #(
       for(i = 0; i < 2*L+1; i = i + 1) begin
         x_buf[i] <= 0;
       end
-    end else if (strobe_resync) begin
+    end else if (strobe_resync && valid_in) begin
       for(i = 0; i < 2*L; i = i + 1) begin
         x_buf[i+1] <= x_buf[i];
       end
@@ -73,7 +73,7 @@ module RACE_part #(
     .out(exp_out_rxx)
   );
 
-  MAC #(IN_SIZE, COEFF_WH) i_mac(
+  MAC #(SAMPLE_SIZE, COEFF_WH) i_mac(
     .clk(clk),
     .en(acc_en),
     .nrst(nrst),
@@ -84,14 +84,18 @@ module RACE_part #(
   );
   
   //round...
-  assign mac_out_round = mac_out[IN_SIZE+COEFF_WH-1 -: OUT_SIZE+1] + 1;
-  assign out = mac_out_round[OUT_SIZE:1];
-  
-  localparam OVF = 2**(COEFF_WH-1);
+  localparam OVF0 = 2**(SAMPLE_SIZE-1);
+  localparam OVF1 = 2**(COEFF_WH-1);
+
+  assign mac_out_round = mac_out[SAMPLE_SIZE+COEFF_WH-1 -: SAMPLE_SIZE+2] + 1;
+  assign out = (mac_out_round[SAMPLE_SIZE+1 -: 2] == 2'b10) ? OVF0   :
+               (mac_out_round[SAMPLE_SIZE+1 -: 2] == 2'b01) ? OVF0-1 :
+                mac_out_round[SAMPLE_SIZE:1]; 
+ 
   
   assign exp_out_rxx_rnd = exp_out_rxx[EXP_VAL_WH-1 -: COEFF_WH+2] + 1;
-  assign out_rxx = (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b10) ? OVF   :
-                   (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b01) ? OVF-1 :
+  assign out_rxx = (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b10) ? OVF1   :
+                   (exp_out_rxx_rnd[COEFF_WH+1 -: 2] == 2'b01) ? OVF1-1 :
                     exp_out_rxx_rnd[COEFF_WH:1]; 
 
 endmodule

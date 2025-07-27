@@ -17,7 +17,7 @@ module AGC #(
 
   localparam SAMPLE_INT = (SAMPLE_WH-SAMPLE_FR);
   localparam GAIN_INT = (GAIN_WH-GAIN_FR);
-  localparam R_VALUE = 0.2 * 2 ** (SAMPLE_FR);
+  localparam R_VALUE = 0.25 * 2 ** (SAMPLE_FR);
  // wire [15:0] R = 16'd6553;
 
   wire [SAMPLE_WH:0] R = R_VALUE;
@@ -67,7 +67,7 @@ module AGC #(
   end
   
   assign sum = $signed(R) - $signed({max_out[SAMPLE_WH-1], max_out});
-  assign alpha_shift = $signed(sum) >>> ALPHA_SHIFT;
+  assign alpha_shift = {{ALPHA_SHIFT{sum[SAMPLE_WH]}}, sum};
 
   assign next_gain =  $signed(curr_gain) +  $signed(alpha_shift);
 

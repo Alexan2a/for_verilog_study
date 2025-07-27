@@ -12,7 +12,6 @@ module MAC #(parameter SAMPLE_SIZE = 16, parameter COEFF_SIZE = 17)(
 
   wire [SAMPLE_SIZE+COEFF_SIZE-1:0] mult;
   reg [SAMPLE_SIZE+COEFF_SIZE-1:0] acc;
-  reg acc_en;
  
   assign dout = acc;
 

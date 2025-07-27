@@ -1,8 +1,7 @@
 module RACE #(
   parameter L = 7,
   parameter BETA_SHIFT = 4,
-  parameter IN_SIZE = 16,
-  parameter OUT_SIZE = 16,
+  parameter SAMPLE_SIZE = 16,
   parameter COEFF_WH = 20,
   parameter COEFF_FR = 19,
   parameter EXP_IN_WH = 32,
@@ -14,10 +13,10 @@ module RACE #(
   input  wire nrst,
   input  wire strobe_resync,
   input  wire valid_in,
-  input  wire [IN_SIZE-1:0] in_real,
-  input  wire [IN_SIZE-1:0] in_imag,
-  output wire [OUT_SIZE-1:0] out_real,
-  output wire [OUT_SIZE-1:0] out_imag,
+  input  wire [SAMPLE_SIZE-1:0] in_real,
+  input  wire [SAMPLE_SIZE-1:0] in_imag,
+  output wire [SAMPLE_SIZE-1:0] out_real,
+  output wire [SAMPLE_SIZE-1:0] out_imag,
   output reg  data_ready
 );
   
@@ -81,9 +80,10 @@ module RACE #(
     rxx <= $signed($signed(rxx_real) + $signed(rxx_imag) + 1) >>> 1;
   end
   
-  RACE_part #(L, BETA_SHIFT, IN_SIZE, OUT_SIZE, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE_real(
+  RACE_part #(L, BETA_SHIFT, SAMPLE_SIZE, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE_real(
     .clk(clk),
     .nrst(nrst),
+    .valid_in(valid_in),
     .en(en),
     .acc_en(acc_en),
     .acc_rst(acc_rst),
@@ -95,9 +95,10 @@ module RACE #(
     .out_rxx(rxx_real)
   );
 
-  RACE_part #(L, BETA_SHIFT, IN_SIZE, OUT_SIZE, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE_imag(
+  RACE_part #(L, BETA_SHIFT, SAMPLE_SIZE, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE_imag(
     .clk(clk),
     .nrst(nrst),
+    .valid_in(valid_in),
     .en(en),
     .acc_en(acc_en),
     .acc_rst(acc_rst),

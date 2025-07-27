@@ -1,6 +1,6 @@
 module RACE_top #(
   parameter L = 7,
-  parameter ALPHA_SHIFT = 4,
+  parameter ALPHA_SHIFT = 5,
   parameter BETA_SHIFT = 4,
   parameter SAMPLE_SIZE = 16,
   parameter COEFF_WH = 20,
@@ -34,11 +34,11 @@ module RACE_top #(
   reg  valid_in_reg;
  // reg  valid_in_reg_prev;
 
-  wire [AGC_WH-1:0] mac_out_real;
-  wire [AGC_WH-1:0] mac_out_imag;
+  wire [SAMPLE_SIZE-1:0] mac_out_real;
+  wire [SAMPLE_SIZE-1:0] mac_out_imag;
 
-  wire [AGC_WH-1:0] agc_out_real;
-  wire [AGC_WH-1:0] agc_out_imag;
+  wire [SAMPLE_SIZE-1:0] agc_out_real;
+  wire [SAMPLE_SIZE-1:0] agc_out_imag;
  
   wire data_ready;
   
@@ -56,7 +56,7 @@ module RACE_top #(
   always @(posedge clk) begin
     strobe_resync_del_0 <= strobe_resync;
     strobe_resync_del_1 <= strobe_resync_del_0;
-    gain_en  <= strobe_resync_del_1;
+    gain_en  <= (strobe_resync_del_1 & valid_in_reg);
   end
 
   always @(posedge clk or negedge nrst) begin
@@ -71,7 +71,7 @@ module RACE_top #(
   
   assign strobe_resync = q1 & !q2;
   
-  RACE #(L, BETA_SHIFT, SAMPLE_SIZE, AGC_WH, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE(
+  RACE #(L, BETA_SHIFT, SAMPLE_SIZE, COEFF_WH, COEFF_FR, EXP_IN_WH, EXP_IN_FR, EXP_VAL_WH, EXP_VAL_FR) i_RACE(
     .clk(clk),
     .strobe_resync(strobe_resync_del_1),
     .nrst(nrst),
